@@ -49,9 +49,13 @@ val MaterialTheme.softSeekColors: SoftSeekExtendedColors
 
 @Composable
 fun SoftSeekTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
     content: @Composable () -> Unit,
 ) {
+    val darkTheme = when (ThemeManager.mode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    }
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
     val extendedColors = if (darkTheme) DarkSoftSeekExtendedColors else LightSoftSeekExtendedColors
 

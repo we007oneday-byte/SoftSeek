@@ -11,12 +11,16 @@ SOFTSEEK（SK）是一个纯 Android 原生、Kotlin + Jetpack Compose 的 DeepS
 已完成：
 
 - Android 工程骨架、Gradle 版本目录、Compose 主题与导航
+- Hilt 依赖注入（`@HiltAndroidApp`、`AppInfo`）
+- 主题三模式（跟随系统 / 浅色 / 深色），设置页可循环切换
 - 聊天页空壳（会话抽屉、空状态、输入栏占位）
 - 设置页占位（API / 模型 / 聊天 / 通话 / 记忆 / 外观 / 数据 / 关于）
-- 引导页、通话页占位
-- 自适应启动图标与 SplashScreen
+- 设置项三种形态（普通 / 开关 / 值）、通用按钮、Markdown 占位
+- 引导页、通话页、关于页占位
+- 自适应启动图标（含 monochrome）与 SplashScreen
+- Android Lint 0 error、JVM 单测、GitHub Actions CI
 
-尚未接入：Room、Hilt、Retrofit/OkHttp、DataStore、Vosk、导入导出。按任务书 P1～P7 推进。
+尚未接入：Room、Retrofit/OkHttp、DataStore、Vosk、导入导出。按任务书 P1～P7 推进。
 
 ## 技术栈
 
@@ -54,13 +58,24 @@ app/build/outputs/apk/debug/app-debug.apk
 app/src/main/java/io/github/we007oneday_byte/softseek/
 ├── ChatApp.kt
 ├── MainActivity.kt
-├── core/constant/AppConstants.kt
+├── core/
+│   ├── constant/AppConstants.kt
+│   └── model/AppInfo.kt
+├── di/AppModule.kt
 └── ui/
     ├── components/common/   # CommonButton / SettingItem / MarkdownText
     ├── navigation/          # AppNavGraph
-    ├── screens/             # chat / settings / guide / call
-    └── theme/               # Color / Type / Theme
+    ├── screens/             # chat / settings / guide / call / about
+    └── theme/               # Color / Type / Theme / ThemeMode
 ```
+
+## 质量检查
+
+```powershell
+.\gradlew.bat ktlintCheck lintDebug testDebugUnitTest assembleDebug
+```
+
+CI 工作流见 `.github/workflows/android.yml`，在 push / PR 时执行同一组检查。
 
 ## 设计约束
 

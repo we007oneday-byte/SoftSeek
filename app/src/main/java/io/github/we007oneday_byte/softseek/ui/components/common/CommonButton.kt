@@ -6,7 +6,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.dimensionResource
+import io.github.we007oneday_byte.softseek.R
 
 @Composable
 fun CommonButton(
@@ -17,7 +18,7 @@ fun CommonButton(
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.heightIn(min = 48.dp),
+        modifier = modifier.heightIn(min = dimensionResource(R.dimen.button_min_height)),
         enabled = enabled,
     ) {
         Text(text = text, style = MaterialTheme.typography.labelLarge)

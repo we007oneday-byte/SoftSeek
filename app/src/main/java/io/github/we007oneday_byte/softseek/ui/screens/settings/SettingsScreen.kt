@@ -17,16 +17,37 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import io.github.we007oneday_byte.softseek.R
 import io.github.we007oneday_byte.softseek.core.constant.AppConstants
 import io.github.we007oneday_byte.softseek.ui.components.common.SettingItem
+import io.github.we007oneday_byte.softseek.ui.theme.ThemeManager
+import io.github.we007oneday_byte.softseek.ui.theme.ThemeMode
 import io.github.we007oneday_byte.softseek.ui.theme.softSeekColors
+
+private data class SettingsEntry(
+    val title: String,
+    val subtitle: String? = null,
+    val onClick: (() -> Unit)? = null,
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SettingsScreen(onBack: () -> Unit) {
+fun SettingsScreen(
+    onBack: () -> Unit,
+    onOpenAbout: () -> Unit = {},
+    onOpenGuide: () -> Unit = {},
+) {
+    val themeLabel = stringResource(
+        when (ThemeManager.mode) {
+            ThemeMode.SYSTEM -> R.string.settings_theme_system
+            ThemeMode.LIGHT -> R.string.settings_theme_light
+            ThemeMode.DARK -> R.string.settings_theme_dark
+        },
+    )
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -54,8 +75,18 @@ fun SettingsScreen(onBack: () -> Unit) {
                 SettingsGroup(
                     title = stringResource(R.string.settings_api),
                     items = listOf(
-                        stringResource(R.string.settings_api_key) to stringResource(R.string.not_configured),
-                        stringResource(R.string.settings_base_url) to AppConstants.DEFAULT_BASE_URL,
+                        SettingsEntry(
+                            title = stringResource(R.string.settings_api_key),
+                            subtitle = stringResource(R.string.settings_api_key_not_set),
+                        ),
+                        SettingsEntry(
+                            title = stringResource(R.string.settings_base_url),
+                            subtitle = AppConstants.DEFAULT_BASE_URL,
+                        ),
+                        SettingsEntry(
+                            title = stringResource(R.string.settings_guide),
+                            onClick = onOpenGuide,
+                        ),
                     ),
                 )
             }
@@ -63,9 +94,18 @@ fun SettingsScreen(onBack: () -> Unit) {
                 SettingsGroup(
                     title = stringResource(R.string.settings_model),
                     items = listOf(
-                        "当前模型" to AppConstants.DEFAULT_MODEL,
-                        "思考强度" to "high（默认）",
-                        "最大输出" to "8K / 64K / 128K",
+                        SettingsEntry(
+                            title = stringResource(R.string.settings_current_model),
+                            subtitle = AppConstants.DEFAULT_MODEL,
+                        ),
+                        SettingsEntry(
+                            title = stringResource(R.string.settings_thinking_effort),
+                            subtitle = stringResource(R.string.settings_thinking_effort_value),
+                        ),
+                        SettingsEntry(
+                            title = stringResource(R.string.settings_max_output),
+                            subtitle = stringResource(R.string.settings_max_output_value),
+                        ),
                     ),
                 )
             }
@@ -73,8 +113,14 @@ fun SettingsScreen(onBack: () -> Unit) {
                 SettingsGroup(
                     title = stringResource(R.string.settings_chat),
                     items = listOf(
-                        "流式输出" to "开启",
-                        "Markdown 渲染" to stringResource(R.string.settings_placeholder),
+                        SettingsEntry(
+                            title = stringResource(R.string.settings_streaming),
+                            subtitle = stringResource(R.string.settings_streaming_on),
+                        ),
+                        SettingsEntry(
+                            title = stringResource(R.string.settings_markdown),
+                            subtitle = stringResource(R.string.settings_placeholder),
+                        ),
                     ),
                 )
             }
@@ -82,8 +128,14 @@ fun SettingsScreen(onBack: () -> Unit) {
                 SettingsGroup(
                     title = stringResource(R.string.settings_call),
                     items = listOf(
-                        "语音识别" to "Vosk small-cn（42MB）",
-                        "语音合成" to "系统 TTS",
+                        SettingsEntry(
+                            title = stringResource(R.string.settings_asr),
+                            subtitle = stringResource(R.string.settings_asr_value),
+                        ),
+                        SettingsEntry(
+                            title = stringResource(R.string.settings_tts),
+                            subtitle = stringResource(R.string.settings_tts_value),
+                        ),
                     ),
                 )
             }
@@ -91,8 +143,14 @@ fun SettingsScreen(onBack: () -> Unit) {
                 SettingsGroup(
                     title = stringResource(R.string.settings_memory),
                     items = listOf(
-                        "自动清理" to "默认关闭，按需开启",
-                        "回收站" to "7 天",
+                        SettingsEntry(
+                            title = stringResource(R.string.settings_auto_cleanup),
+                            subtitle = stringResource(R.string.settings_auto_cleanup_value),
+                        ),
+                        SettingsEntry(
+                            title = stringResource(R.string.settings_recycle_bin),
+                            subtitle = stringResource(R.string.settings_recycle_bin_value),
+                        ),
                     ),
                 )
             }
@@ -100,8 +158,15 @@ fun SettingsScreen(onBack: () -> Unit) {
                 SettingsGroup(
                     title = stringResource(R.string.settings_appearance),
                     items = listOf(
-                        "主题" to "跟随系统",
-                        "动态取色" to "关闭",
+                        SettingsEntry(
+                            title = stringResource(R.string.settings_theme),
+                            subtitle = themeLabel,
+                            onClick = { ThemeManager.cycle() },
+                        ),
+                        SettingsEntry(
+                            title = stringResource(R.string.settings_dynamic_color),
+                            subtitle = stringResource(R.string.settings_dynamic_color_off),
+                        ),
                     ),
                 )
             }
@@ -109,8 +174,14 @@ fun SettingsScreen(onBack: () -> Unit) {
                 SettingsGroup(
                     title = stringResource(R.string.settings_data),
                     items = listOf(
-                        "导出 / 导入" to stringResource(R.string.settings_placeholder),
-                        "本地存储" to "仅本机，不上传",
+                        SettingsEntry(
+                            title = stringResource(R.string.settings_export_import),
+                            subtitle = stringResource(R.string.settings_placeholder),
+                        ),
+                        SettingsEntry(
+                            title = stringResource(R.string.settings_local_storage),
+                            subtitle = stringResource(R.string.settings_local_storage_value),
+                        ),
                     ),
                 )
             }
@@ -118,15 +189,22 @@ fun SettingsScreen(onBack: () -> Unit) {
                 SettingsGroup(
                     title = stringResource(R.string.settings_about),
                     items = listOf(
-                        "版本" to AppConstants.APP_VERSION,
-                        "应用性质" to stringResource(R.string.app_subtitle),
+                        SettingsEntry(
+                            title = stringResource(R.string.settings_version),
+                            subtitle = AppConstants.APP_VERSION,
+                            onClick = onOpenAbout,
+                        ),
+                        SettingsEntry(
+                            title = stringResource(R.string.settings_app_nature),
+                            subtitle = stringResource(R.string.app_subtitle),
+                        ),
                     ),
                 )
             }
             item {
                 Text(
                     text = stringResource(R.string.disclaimer),
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier.padding(dimensionResource(R.dimen.content_padding)),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.softSeekColors.textSecondary,
                 )
@@ -138,20 +216,25 @@ fun SettingsScreen(onBack: () -> Unit) {
 @Composable
 private fun SettingsGroup(
     title: String,
-    items: List<Pair<String, String?>>,
+    items: List<SettingsEntry>,
 ) {
     Column {
         Text(
             text = title,
-            modifier = Modifier.padding(start = 16.dp, top = 20.dp, end = 16.dp, bottom = 8.dp),
+            modifier = Modifier.padding(
+                start = dimensionResource(R.dimen.content_padding),
+                top = 20.dp,
+                end = dimensionResource(R.dimen.content_padding),
+                bottom = dimensionResource(R.dimen.item_spacing),
+            ),
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary,
         )
-        items.forEach { (itemTitle, subtitle) ->
+        items.forEach { entry ->
             SettingItem(
-                title = itemTitle,
-                subtitle = subtitle,
-                onClick = { },
+                title = entry.title,
+                subtitle = entry.subtitle,
+                onClick = entry.onClick,
             )
         }
         HorizontalDivider(color = MaterialTheme.softSeekColors.divider)

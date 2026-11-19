@@ -54,7 +54,7 @@ fun CallScreen(onEndCall: () -> Unit) {
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "00:00",
+                text = stringResource(R.string.call_duration_placeholder),
                 style = MaterialTheme.typography.bodyLarge,
                 color = Color.White.copy(alpha = 0.7f),
             )
