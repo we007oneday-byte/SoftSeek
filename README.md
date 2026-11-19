@@ -19,10 +19,15 @@ P5 已完成：
 - AudioRecord：16kHz/16bit/mono，优先 `VOICE_COMMUNICATION`，回退 `MIC`，可用时显式启用 `AcousticEchoCanceler`
 - 系统 TTS 封装：中文语言检测、语速/音调、stop/release、逐句回调；设置页提供试听入口
 - 通话状态机：Dialing/Listening/Thinking/Speaking/Ended/Error，半双工录音；ASR Final 触发 `ChatRepository` 流式回复，回复完成后系统 TTS 播报，播报结束回到 Listening；支持键盘输入、静音、挂断释放
-- 通话页：麦克风权限请求、状态/时长、partial 与双方字幕、静音/键盘/挂断按钮、键盘发送、错误提示
-- 新增 10 项模型/结果解析单测；当前 50 项单测、Lint 0 issue、debug APK 可构建
+- 通话页：麦克风权限请求、状态/时长、partial 与双方字幕、静音/免提/键盘/挂断按钮、键盘发送、停止生成/打断播报、错误提示
+- TTS 分句队列：句末标点切分、80 字硬切、`QUEUE_ADD` 续播、按 utteranceId 过滤 Done/Error，避免旧播报回调误触发
+- 音频模式：`MODE_IN_COMMUNICATION`、音频焦点、听筒/免提切换（Android 12+ 走 `setCommunicationDevice`，旧版回退），挂断恢复原模式/路由
+- 前台服务：`microphone` 类型、常驻通知、2 小时 Partial WakeLock；通话开始时启动，挂断/异常时释放
+- 接近传感器：贴近时调暗屏幕并移除 `KEEP_SCREEN_ON`，离开恢复亮度与常亮
+- 通话会话固定 `ReasoningEffort.LOW`、输出上限 4096，写入记忆池配置；挂断后会话保留在列表，聊天参数不受影响
+- 新增 5 项 TTS 分句单测；当前 55 项单测、Lint 0 issue、debug APK 可构建
 
-P5 尚未接入：分句与打断、音频模式/焦点、前台服务、接近传感器、降档/归档、真机测试。
+P5 尚未完成：P5-14 真机测试（当前无真机/模拟器，回声、延迟、打断、1h 耗电待验证）；P5-06 sherpa-onnx TTS 首版按可选不启用。真机清单见 `docs/P5-14_通话真机测试报告.md`。
 
 **阶段 4：多模态、模型与设置（P4，已完成）**
 

@@ -57,11 +57,17 @@ class SystemTtsEngine
         override fun speak(
             text: String,
             utteranceId: String,
+            queueMode: TtsQueueMode,
         ): Result<Unit> {
             if (text.isBlank()) return Result.failure(IllegalArgumentException("播报文本为空"))
             val engine = tts ?: return Result.failure(IllegalStateException("系统 TTS 尚未初始化"))
             if (!_ready.value) return Result.failure(IllegalStateException("系统 TTS 未就绪"))
-            val result = engine.speak(text, TextToSpeech.QUEUE_FLUSH, null, utteranceId)
+            val mode = if (queueMode == TtsQueueMode.ADD) {
+                TextToSpeech.QUEUE_ADD
+            } else {
+                TextToSpeech.QUEUE_FLUSH
+            }
+            val result = engine.speak(text, mode, null, utteranceId)
             return if (result == TextToSpeech.SUCCESS) {
                 Result.success(Unit)
             } else {

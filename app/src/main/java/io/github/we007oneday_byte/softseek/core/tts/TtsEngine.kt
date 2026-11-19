@@ -10,6 +10,7 @@ interface TtsEngine {
     fun speak(
         text: String,
         utteranceId: String,
+        queueMode: TtsQueueMode = TtsQueueMode.FLUSH,
     ): Result<Unit>
 
     fun stop()
@@ -19,6 +20,14 @@ interface TtsEngine {
     fun setPitch(pitch: Float)
 
     fun release()
+}
+
+enum class TtsQueueMode {
+    /** 清空当前队列后播报，用于新回复或设置页试听。 */
+    FLUSH,
+
+    /** 追加到当前队列，用于同一回复的后续分句。 */
+    ADD,
 }
 
 sealed interface TtsEvent {

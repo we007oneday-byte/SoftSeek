@@ -1,17 +1,24 @@
 package io.github.we007oneday_byte.softseek.ui.screens.call
 
+import android.content.Context
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
 import io.github.we007oneday_byte.softseek.core.asr.AsrEngine
 import io.github.we007oneday_byte.softseek.core.asr.AsrEngineFactory
 import io.github.we007oneday_byte.softseek.core.asr.AsrEvent
 import io.github.we007oneday_byte.softseek.core.audio.AudioCapture
+import io.github.we007oneday_byte.softseek.core.audio.CallAudioController
+import io.github.we007oneday_byte.softseek.core.audio.CallForegroundService
 import io.github.we007oneday_byte.softseek.core.tts.TtsEngine
 import io.github.we007oneday_byte.softseek.core.tts.TtsEvent
+import io.github.we007oneday_byte.softseek.core.tts.TtsQueueMode
+import io.github.we007oneday_byte.softseek.core.tts.TtsTextSplitter
 import io.github.we007oneday_byte.softseek.data.settings.SettingsRepository
 import io.github.we007oneday_byte.softseek.domain.model.ChatSendEvent
 import io.github.we007oneday_byte.softseek.domain.model.MemoryPoolConfig
+import io.github.we007oneday_byte.softseek.domain.model.ReasoningEffort
 import io.github.we007oneday_byte.softseek.domain.model.userMessage
 import io.github.we007oneday_byte.softseek.domain.repository.ChatRepository
 import io.github.we007oneday_byte.softseek.domain.repository.ConversationRepository
@@ -51,6 +58,7 @@ data class CallUiState(
     val error: String? = null,
     val durationSeconds: Int = 0,
     val muted: Boolean = false,
+    val speakerOn: Boolean = false,
     val inputText: String = "",
     val showKeyboard: Boolean = false,
 )
@@ -63,8 +71,10 @@ data class CallUiState(
 class CallViewModel
     @Inject
     constructor(
+        @ApplicationContext private val context: Context,
         private val asrEngineFactory: AsrEngineFactory,
         private val ttsEngine: TtsEngine,
+        private val callAudioController: CallAudioController,
         private val chatRepository: ChatRepository,
         private val conversationRepository: ConversationRepository,
         private val memoryPoolRepository: MemoryPoolRepository,
@@ -80,6 +90,9 @@ class CallViewModel
         private var timerJob: Job? = null
         private var sendJob: Job? = null
         private var ttsWaiter: CompletableDeferred<Boolean>? = null
+        private var activeTtsIds: Set<String> = emptySet()
+        private var lastTtsId: String? = null
+        private var serviceStarted = false
         private var started = false
         private var ended = false
         private var busy = false
@@ -88,10 +101,21 @@ class CallViewModel
             ttsEngine.events
                 .onEach { event ->
                     when (event) {
-                        is TtsEvent.Done -> ttsWaiter?.complete(true)
+                        is TtsEvent.Done -> {
+                            if (event.utteranceId == lastTtsId) {
+                                activeTtsIds = emptySet()
+                                lastTtsId = null
+                                ttsWaiter?.complete(true)
+                            }
+                        }
                         is TtsEvent.Error -> {
-                            ttsWaiter?.complete(false)
-                            _uiState.update { it.copy(error = event.message) }
+                            if (event.utteranceId == null || event.utteranceId in activeTtsIds) {
+                                ttsEngine.stop()
+                                activeTtsIds = emptySet()
+                                lastTtsId = null
+                                ttsWaiter?.complete(false)
+                                _uiState.update { it.copy(error = event.message) }
+                            }
                         }
                         is TtsEvent.Started -> Unit
                     }
@@ -108,8 +132,8 @@ class CallViewModel
                     val conversation = conversationRepository.createConversation(
                         title = callTitle(),
                         modelName = settings.defaultModel,
-                        reasoningEffort = settings.defaultReasoningEffort,
-                        maxOutputTokens = settings.defaultMaxOutputTokens,
+                        reasoningEffort = ReasoningEffort.LOW,
+                        maxOutputTokens = minOf(settings.defaultMaxOutputTokens, CALL_MAX_OUTPUT_TOKENS),
                     )
                     conversationId = conversation.id
                     memoryPoolRepository.upsertConfig(
@@ -142,17 +166,22 @@ class CallViewModel
                         .launchIn(viewModelScope)
 
                     engine.start().getOrElse { throw it }
+                    callAudioController.enterCallMode().getOrElse { throw it }
                     capture.start().getOrElse { throw it }
+                    runCatching { CallForegroundService.start(context) }
+                        .onSuccess { serviceStarted = true }
                     _uiState.update {
                         it.copy(
                             phase = CallPhase.LISTENING,
                             error = null,
                             partialText = "",
+                            speakerOn = callAudioController.speakerOn,
                         )
                     }
                     startAudioLoop()
                     startTimer()
                 } catch (error: Exception) {
+                    releaseCallResources()
                     _uiState.update {
                         it.copy(
                             phase = CallPhase.ERROR,
@@ -188,23 +217,42 @@ class CallViewModel
             }
         }
 
+        fun toggleSpeaker() {
+            if (ended || _uiState.value.phase == CallPhase.ERROR) return
+            val next = !_uiState.value.speakerOn
+            callAudioController.setSpeakerOn(next)
+            _uiState.update { it.copy(speakerOn = next) }
+        }
+
+        /** 用户主动打断播报；TTS stop 后在一次队列清空内回到 Listening。 */
+        fun interruptSpeaking() {
+            if (_uiState.value.phase != CallPhase.SPEAKING) return
+            ttsEngine.stop()
+            activeTtsIds = emptySet()
+            lastTtsId = null
+            ttsWaiter?.complete(false)
+            ttsWaiter = null
+            _uiState.update { it.copy(phase = CallPhase.LISTENING, partialText = "") }
+        }
+
+        /** 停止本轮生成；流式请求取消后由 finally 统一恢复 Listening。 */
+        fun cancelResponse() {
+            if (_uiState.value.phase != CallPhase.THINKING) return
+            sendJob?.cancel()
+            sendJob = null
+            _uiState.update { it.copy(phase = CallPhase.LISTENING, error = null) }
+        }
+
         fun endCall() {
             if (ended) return
             ended = true
             busy = false
             sendJob?.cancel()
             sendJob = null
-            stopCapture()
-            timerJob?.cancel()
-            timerJob = null
             ttsWaiter?.complete(false)
             ttsWaiter = null
             ttsEngine.stop()
-            asrEngine?.let {
-                runCatching { it.finish() }
-                runCatching { it.release() }
-            }
-            asrEngine = null
+            releaseCallResources()
             _uiState.update {
                 it.copy(
                     phase = CallPhase.ENDED,
@@ -218,6 +266,22 @@ class CallViewModel
             endCall()
             ttsEngine.stop()
             super.onCleared()
+        }
+
+        private fun releaseCallResources() {
+            stopCapture()
+            timerJob?.cancel()
+            timerJob = null
+            asrEngine?.let {
+                runCatching { it.finish() }
+                runCatching { it.release() }
+            }
+            asrEngine = null
+            callAudioController.exitCallMode()
+            if (serviceStarted) {
+                CallForegroundService.stop(context)
+                serviceStarted = false
+            }
         }
 
         private fun startAudioLoop() {
@@ -334,21 +398,41 @@ class CallViewModel
 
         private suspend fun speakAndWait(text: String) {
             if (text.isBlank() || ended) return
+            val sentences = TtsTextSplitter.split(text)
+            if (sentences.isEmpty()) return
             _uiState.update { it.copy(phase = CallPhase.SPEAKING) }
+            val baseId = "call-${System.currentTimeMillis()}"
+            val ids = sentences.indices.map { index -> "$baseId-$index" }
             val waiter = CompletableDeferred<Boolean>()
             ttsWaiter = waiter
-            val result = ttsEngine.speak(text, "call-${System.currentTimeMillis()}")
-            if (result.isFailure) {
-                ttsWaiter = null
-                _uiState.update {
-                    it.copy(error = result.exceptionOrNull()?.message ?: "系统 TTS 不可用")
+            activeTtsIds = ids.toSet()
+            lastTtsId = ids.last()
+            var failed: String? = null
+            sentences.forEachIndexed { index, sentence ->
+                val result = ttsEngine.speak(
+                    text = sentence,
+                    utteranceId = ids[index],
+                    queueMode = if (index == 0) TtsQueueMode.FLUSH else TtsQueueMode.ADD,
+                )
+                if (result.isFailure && failed == null) {
+                    failed = result.exceptionOrNull()?.message ?: "系统 TTS 不可用"
                 }
+            }
+            if (failed != null) {
+                ttsEngine.stop()
+                activeTtsIds = emptySet()
+                lastTtsId = null
+                ttsWaiter = null
+                _uiState.update { it.copy(error = failed) }
                 return
             }
-            val completed = withTimeoutOrNull(TTS_TIMEOUT_MILLIS) { waiter.await() }
+            val timeout = maxOf(TTS_TIMEOUT_MILLIS, sentences.size * TTS_TIMEOUT_PER_SENTENCE_MILLIS)
+            val completed = withTimeoutOrNull(timeout) { waiter.await() }
             ttsWaiter = null
             if (completed == null) {
                 ttsEngine.stop()
+                activeTtsIds = emptySet()
+                lastTtsId = null
                 _uiState.update { it.copy(error = "语音播报超时") }
             }
         }
@@ -370,6 +454,8 @@ class CallViewModel
 
         private companion object {
             const val AUDIO_FRAME_SAMPLES = 1_024
+            const val CALL_MAX_OUTPUT_TOKENS = 4_096
             const val TTS_TIMEOUT_MILLIS = 90_000L
+            const val TTS_TIMEOUT_PER_SENTENCE_MILLIS = 20_000L
         }
     }

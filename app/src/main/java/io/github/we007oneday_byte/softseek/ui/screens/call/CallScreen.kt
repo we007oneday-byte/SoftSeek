@@ -1,7 +1,16 @@
 package io.github.we007oneday_byte.softseek.ui.screens.call
 
 import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import android.content.pm.PackageManager
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
+import android.os.Build
+import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -64,19 +73,21 @@ fun CallScreen(onEndCall: () -> Unit) {
             permissionDenied = true
         }
     }
-
+    val notificationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { }
     LaunchedEffect(Unit) {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
             PackageManager.PERMISSION_GRANTED
         ) {
-            viewModel.startCall()
-        } else {
-            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+            notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
     }
     DisposableEffect(Unit) {
         onDispose { viewModel.endCall() }
     }
+    ProximityEffect()
 
     Box(
         modifier = Modifier
@@ -177,9 +188,19 @@ fun CallScreen(onEndCall: () -> Unit) {
                 }
                 Spacer(Modifier.height(8.dp))
             }
+            if (state.phase == CallPhase.THINKING) {
+                TextButton(onClick = viewModel::cancelResponse) {
+                    Text("停止生成")
+                }
+            }
+            if (state.phase == CallPhase.SPEAKING) {
+                TextButton(onClick = viewModel::interruptSpeaking) {
+                    Text("打断播报")
+                }
+            }
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Button(
@@ -192,6 +213,17 @@ fun CallScreen(onEndCall: () -> Unit) {
                     ),
                 ) {
                     Text(if (state.muted) "取消静音" else "静音")
+                }
+                Button(
+                    onClick = viewModel::toggleSpeaker,
+                    modifier = Modifier.weight(1f),
+                    enabled = state.phase != CallPhase.ENDED && state.phase != CallPhase.ERROR,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color.White.copy(alpha = 0.14f),
+                        contentColor = Color.White,
+                    ),
+                ) {
+                    Text(if (state.speakerOn) "听筒" else "免提")
                 }
                 Button(
                     onClick = viewModel::toggleKeyboard,
@@ -231,6 +263,59 @@ fun CallScreen(onEndCall: () -> Unit) {
             )
         }
     }
+}
+
+@Composable
+private fun ProximityEffect() {
+    val context = LocalContext.current
+    val activity = remember(context) { context.findActivity() }
+    DisposableEffect(activity) {
+        if (activity == null) {
+            onDispose { }
+        } else {
+            val window = activity.window
+            val sensorManager = activity.getSystemService(SensorManager::class.java)
+            val proximity = sensorManager?.getDefaultSensor(Sensor.TYPE_PROXIMITY)
+            val listener = object : SensorEventListener {
+                override fun onSensorChanged(event: SensorEvent) {
+                    val near = event.values.firstOrNull()?.let { value ->
+                        value < (event.sensor.maximumRange.takeIf { it > 0f } ?: 5f)
+                    } == true
+                    val attributes = window.attributes
+                    if (near) {
+                        attributes.screenBrightness = 0.01f
+                        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    } else {
+                        attributes.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    }
+                    window.attributes = attributes
+                }
+
+                override fun onAccuracyChanged(
+                    sensor: Sensor?,
+                    accuracy: Int,
+                ) = Unit
+            }
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            proximity?.let {
+                sensorManager?.registerListener(listener, it, SensorManager.SENSOR_DELAY_NORMAL)
+            }
+            onDispose {
+                sensorManager?.unregisterListener(listener)
+                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                val attributes = window.attributes
+                attributes.screenBrightness = WindowManager.LayoutParams.BRIGHTNESS_OVERRIDE_NONE
+                window.attributes = attributes
+            }
+        }
+    }
+}
+
+private fun Context.findActivity(): Activity? = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> null
 }
 
 @Composable
