@@ -6,7 +6,21 @@ SOFTSEEK（SK）是一个纯 Android 原生、Kotlin + Jetpack Compose 的 DeepS
 
 ## 当前状态
 
-**阶段 4：多模态、模型与设置（P4）**
+**阶段 5：通话基础（P5，进行中）**
+
+P5 已完成：
+
+- 通话权限基线：`RECORD_AUDIO`、`POST_NOTIFICATIONS`、`FOREGROUND_SERVICE`、`FOREGROUND_SERVICE_MICROPHONE`、`MODIFY_AUDIO_SETTINGS`、`WAKE_LOCK`；麦克风声明为可选硬件
+- Vosk 0.3.47 接入；`AsrEngine` 稳定接口（partial/final/error）
+- `VoskModelSpec` 固化 small-cn 42MB 模型 URL、大小 `43,898,754`、SHA-256 `3af8b0e7…5b14ba` 与必需文件清单
+- 模型管理：Range 断点续传、大小/SHA-256 校验、zip slip/条目数量/解压体积防护、staging 解压后原子替换；失败保留 `.part`
+- 设置页“离线识别模型”支持下载进度、取消、失败重试；模型安装在 `filesDir/models/vosk-model-small-cn-0.22`
+- 系统 TTS 封装：中文语言检测、语速/音调、stop/release、逐句回调；设置页提供试听入口
+- 新增 6 项模型管理单测；当前 46 项单测、Lint 0 issue、debug APK 可构建
+
+P5 尚未接入：Vosk 流式识别、AudioRecord/AEC、通话状态机、通话页 UI、前台服务与接近传感器。
+
+**阶段 4：多模态、模型与设置（P4，已完成）**
 
 已完成：
 
@@ -48,6 +62,7 @@ SOFTSEEK（SK）是一个纯 Android 原生、Kotlin + Jetpack Compose 的 DeepS
 - Coil 2.7.0、ExifInterface 1.3.7
 - WorkManager 2.10.0 + Hilt Worker
 - Retrofit 2.11.0 + OkHttp 4.12.0 + kotlinx.serialization 1.7.3
+- Vosk Android 0.3.47（离线中文 small-cn 模型）
 - AGP 8.9.0 / Gradle 8.11.1
 - `minSdk 30`，`targetSdk 36`，`compileSdk 36`
 - JDK 21
@@ -80,12 +95,14 @@ app/src/main/java/io/github/we007oneday_byte/softseek/
 ├── ChatApp.kt
 ├── MainActivity.kt
 ├── core/
+│   ├── asr/                # Vosk 模型规格/下载/校验/解压 + AsrEngine
 │   ├── auth/               # Keystore AES/GCM 多 Key
 │   ├── constant/AppConstants.kt
 │   ├── image/              # ImageProcessor（压缩/缓存）
 │   ├── model/AppInfo.kt
 │   ├── network/            # BaseUrlValidator / DynamicApiFactory
-│   └── settings/           # AppSettings / ParameterPreset
+│   ├── settings/           # AppSettings / ParameterPreset
+│   └── tts/                # TtsEngine + 系统 TextToSpeech
 ├── data/
 │   ├── cleanup/            # CleanupEngine
 │   ├── local/

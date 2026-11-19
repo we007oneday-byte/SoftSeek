@@ -139,6 +139,7 @@ dependencies {
     implementation(libs.datastore.preferences)
     implementation(libs.coil.compose)
     implementation(libs.exifinterface)
+    implementation(libs.vosk.android)
     ksp(libs.hilt.compiler)
     ksp(libs.room.compiler)
     ksp(libs.androidx.hilt.compiler)

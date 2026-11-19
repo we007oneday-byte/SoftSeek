@@ -3,10 +3,14 @@ package io.github.we007oneday_byte.softseek.ui.screens.settings
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import io.github.we007oneday_byte.softseek.core.asr.VoskModelManager
+import io.github.we007oneday_byte.softseek.core.asr.VoskModelState
 import io.github.we007oneday_byte.softseek.core.image.ImageProcessor
 import io.github.we007oneday_byte.softseek.core.network.BaseUrlValidator
 import io.github.we007oneday_byte.softseek.core.settings.AppSettings
 import io.github.we007oneday_byte.softseek.core.settings.ParameterPreset
+import io.github.we007oneday_byte.softseek.core.tts.TtsEngine
+import io.github.we007oneday_byte.softseek.core.tts.TtsEvent
 import io.github.we007oneday_byte.softseek.data.model.ModelCatalog
 import io.github.we007oneday_byte.softseek.data.settings.SettingsRepository
 import io.github.we007oneday_byte.softseek.domain.auth.ApiKeyStore
@@ -51,12 +55,19 @@ class SettingsViewModel
         private val memoryPoolRepository: MemoryPoolRepository,
         private val usageRepository: UsageRepository,
         private val imageProcessor: ImageProcessor,
+        private val voskModelManager: VoskModelManager,
+        private val ttsEngine: TtsEngine,
         private val json: kotlinx.serialization.json.Json,
     ) : ViewModel() {
         val settings: StateFlow<AppSettings> = settingsRepository.settings
         val apiKeys = apiKeyStore.keySummaries
         val models: StateFlow<List<AiModelInfo>> = modelCatalog.models
         val activeKey: StateFlow<String?> = apiKeyStore.apiKey
+        val asrModelState: StateFlow<VoskModelState> = voskModelManager.state
+        val ttsReady: StateFlow<Boolean> = ttsEngine.ready
+
+        private val ttsMessageState = MutableStateFlow<String?>(null)
+        val ttsMessage: StateFlow<String?> = ttsMessageState.asStateFlow()
 
         private val balanceState = MutableStateFlow(BalanceUiState())
         val balance: StateFlow<BalanceUiState> = balanceState.asStateFlow()
@@ -72,6 +83,16 @@ class SettingsViewModel
 
         init {
             refreshUsage()
+            voskModelManager.refresh()
+            viewModelScope.launch {
+                ttsEngine.events.collect { event ->
+                    ttsMessageState.value = when (event) {
+                        is TtsEvent.Started -> "正在播报…"
+                        is TtsEvent.Done -> "播报完成"
+                        is TtsEvent.Error -> event.message
+                    }
+                }
+            }
         }
 
         fun update(transform: (AppSettings) -> AppSettings) {
@@ -204,6 +225,19 @@ class SettingsViewModel
         }
 
         fun clearImageCache(): Int = imageProcessor.clearCache()
+
+        fun installAsrModel() {
+            voskModelManager.install()
+        }
+
+        fun cancelAsrModelInstall() {
+            voskModelManager.cancelInstall()
+        }
+
+        fun testTts() {
+            val result = ttsEngine.speak("你好，我是 SOFTSEEK 的语音助手。", "settings-test")
+            ttsMessageState.value = result.exceptionOrNull()?.message ?: "正在播报…"
+        }
 
         fun savePreset(name: String) {
             val clean = name.trim()

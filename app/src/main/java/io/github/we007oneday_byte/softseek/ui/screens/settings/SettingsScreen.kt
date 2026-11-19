@@ -45,6 +45,7 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.we007oneday_byte.softseek.R
+import io.github.we007oneday_byte.softseek.core.asr.VoskModelState
 import io.github.we007oneday_byte.softseek.core.constant.AppConstants
 import io.github.we007oneday_byte.softseek.core.settings.AppThemeMode
 import io.github.we007oneday_byte.softseek.core.settings.CodeTheme
@@ -74,6 +75,9 @@ fun SettingsScreen(
     val models by viewModel.models.collectAsStateWithLifecycle()
     val balance by viewModel.balance.collectAsStateWithLifecycle()
     val usage by viewModel.usage.collectAsStateWithLifecycle()
+    val asrModelState by viewModel.asrModelState.collectAsStateWithLifecycle()
+    val ttsReady by viewModel.ttsReady.collectAsStateWithLifecycle()
+    val ttsMessage by viewModel.ttsMessage.collectAsStateWithLifecycle()
     val cleanupPreview by viewModel.cleanupPreview.collectAsStateWithLifecycle()
     val baseUrlError by viewModel.baseUrlError.collectAsStateWithLifecycle()
     var showKeyManager by remember { mutableStateOf(false) }
@@ -215,16 +219,49 @@ fun SettingsScreen(
             item {
                 SettingsGroup(
                     title = stringResource(R.string.settings_call),
-                    items = listOf(
-                        SettingsEntry(
-                            title = stringResource(R.string.settings_asr),
-                            subtitle = stringResource(R.string.settings_asr_value),
-                        ),
-                        SettingsEntry(
-                            title = stringResource(R.string.settings_tts),
-                            subtitle = stringResource(R.string.settings_tts_value),
-                        ),
-                    ),
+                    items = buildList {
+                        add(
+                            SettingsEntry(
+                                title = stringResource(R.string.settings_asr_model),
+                                subtitle = asrModelSubtitle(asrModelState),
+                                onClick = if (asrModelState is VoskModelState.Installed) {
+                                    null
+                                } else {
+                                    viewModel::installAsrModel
+                                },
+                            ),
+                        )
+                        if (
+                            asrModelState is VoskModelState.Downloading ||
+                            asrModelState is VoskModelState.Verifying ||
+                            asrModelState is VoskModelState.Extracting
+                        ) {
+                            add(
+                                SettingsEntry(
+                                    title = stringResource(R.string.settings_asr_model_cancel),
+                                    subtitle = stringResource(R.string.settings_asr_model_cancel_value),
+                                    onClick = viewModel::cancelAsrModelInstall,
+                                ),
+                            )
+                        }
+                        add(
+                            SettingsEntry(
+                                title = stringResource(R.string.settings_tts),
+                                subtitle = stringResource(R.string.settings_tts_value),
+                            ),
+                        )
+                        add(
+                            SettingsEntry(
+                                title = "试听系统 TTS",
+                                subtitle = ttsMessage ?: if (ttsReady) {
+                                    "点击播报"
+                                } else {
+                                    "系统 TTS 未就绪"
+                                },
+                                onClick = viewModel::testTts,
+                            ),
+                        )
+                    },
                 )
             }
             item {
@@ -1020,6 +1057,23 @@ private fun themeLabel(mode: AppThemeMode): String = when (mode) {
     AppThemeMode.SYSTEM -> "跟随系统"
     AppThemeMode.LIGHT -> "浅色"
     AppThemeMode.DARK -> "深色"
+}
+
+@Composable
+private fun asrModelSubtitle(state: VoskModelState): String = when (state) {
+    VoskModelState.NotInstalled -> stringResource(R.string.settings_asr_model_not_installed)
+    is VoskModelState.Downloading -> {
+        val percent = if (state.totalBytes > 0) {
+            ((state.downloadedBytes * 100) / state.totalBytes).toInt()
+        } else {
+            0
+        }
+        stringResource(R.string.settings_asr_model_downloading, percent)
+    }
+    VoskModelState.Verifying -> stringResource(R.string.settings_asr_model_verifying)
+    VoskModelState.Extracting -> stringResource(R.string.settings_asr_model_extracting)
+    is VoskModelState.Installed -> stringResource(R.string.settings_asr_model_installed)
+    is VoskModelState.Failed -> stringResource(R.string.settings_asr_model_failed, state.message)
 }
 
 private fun codeThemeLabel(theme: CodeTheme): String = when (theme) {

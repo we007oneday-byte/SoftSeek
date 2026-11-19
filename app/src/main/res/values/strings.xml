@@ -42,8 +42,15 @@
     <string name="settings_streaming">流式输出</string>
     <string name="settings_streaming_on">开启</string>
     <string name="settings_markdown">Markdown 渲染</string>
-    <string name="settings_asr">语音识别</string>
-    <string name="settings_asr_value">Vosk small-cn（42MB）</string>
+    <string name="settings_asr_model">离线识别模型</string>
+    <string name="settings_asr_model_not_installed">未安装 · 点击下载 42MB</string>
+    <string name="settings_asr_model_downloading">下载中 %1$d%%</string>
+    <string name="settings_asr_model_verifying">校验 SHA-256…</string>
+    <string name="settings_asr_model_extracting">解压安装…</string>
+    <string name="settings_asr_model_installed">已安装 · 离线可用</string>
+    <string name="settings_asr_model_failed">失败：%1$s</string>
+    <string name="settings_asr_model_cancel">取消模型下载</string>
+    <string name="settings_asr_model_cancel_value">保留已下载部分，下次续传</string>
     <string name="settings_tts">语音合成</string>
     <string name="settings_tts_value">系统 TTS</string>
     <string name="settings_auto_cleanup">自动清理</string>
