@@ -119,6 +119,7 @@ class VoskModelManager
         }
 
         private suspend fun download(archive: File) {
+            store.ensureModelsDir().getOrElse { throw it }
             val existing = if (archive.isFile) archive.length() else 0L
             if (existing == spec.archiveBytes) {
                 _state.value = VoskModelState.Downloading(existing, spec.archiveBytes)

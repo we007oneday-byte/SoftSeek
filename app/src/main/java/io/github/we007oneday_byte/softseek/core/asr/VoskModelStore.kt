@@ -4,6 +4,7 @@ import java.io.BufferedInputStream
 import java.io.File
 import java.io.FileInputStream
 import java.io.FileOutputStream
+import java.io.IOException
 import java.security.MessageDigest
 import java.util.zip.ZipInputStream
 
@@ -17,6 +18,15 @@ class VoskModelStore(
     fun modelDir(spec: VoskModelSpec): File = File(modelsDir, spec.rootDirName)
 
     fun archivePart(spec: VoskModelSpec): File = File(modelsDir, "${spec.id}.zip.part")
+
+    /** 下载或解压前必须先确保私有模型目录存在，否则 FileOutputStream 会抛出 ENOENT。 */
+    fun ensureModelsDir(): Result<File> {
+        if (modelsDir.isDirectory) return Result.success(modelsDir)
+        if (modelsDir.mkdirs() || modelsDir.isDirectory) return Result.success(modelsDir)
+        return Result.failure(
+            IOException("无法创建模型缓存目录：${modelsDir.absolutePath}"),
+        )
+    }
 
     fun inspect(spec: VoskModelSpec): VoskModelState =
         if (isInstalled(spec)) {
@@ -69,7 +79,7 @@ class VoskModelStore(
         val staging = File(modelsDir, ".staging-${spec.id}")
         val old = File(modelsDir, ".old-${spec.id}")
         return try {
-            modelsDir.mkdirs()
+            ensureModelsDir().getOrElse { throw it }
             deleteTree(staging)
             deleteTree(old)
             staging.mkdirs()

@@ -28,6 +28,28 @@ class VoskModelStoreTest {
     )
 
     @Test
+    fun ensureModelsDir_createsNestedDirectoryBeforeDownload() {
+        val models = File(temporaryFolder.root, "files/models")
+        val store = VoskModelStore(models)
+
+        val result = store.ensureModelsDir()
+
+        assertTrue(result.isSuccess)
+        assertTrue(models.isDirectory)
+    }
+
+    @Test
+    fun ensureModelsDir_reportsBlockedPath() {
+        val blocked = temporaryFolder.newFile("models")
+        val store = VoskModelStore(blocked)
+
+        val result = store.ensureModelsDir()
+
+        assertTrue(result.isFailure)
+        assertTrue(result.exceptionOrNull()?.message.orEmpty().contains("无法创建"))
+    }
+
+    @Test
     fun sha256_matchesKnownVector() {
         val file = temporaryFolder.newFile("abc.txt").apply { writeText("abc") }
 

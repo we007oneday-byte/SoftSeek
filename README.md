@@ -25,7 +25,7 @@ P5 已完成：
 - 前台服务：`microphone` 类型、常驻通知、2 小时 Partial WakeLock；通话开始时启动，挂断/异常时释放
 - 接近传感器：贴近时调暗屏幕并移除 `KEEP_SCREEN_ON`，离开恢复亮度与常亮
 - 通话会话固定 `ReasoningEffort.LOW`、输出上限 4096，写入记忆池配置；挂断后会话保留在列表，聊天参数不受影响
-- 新增 5 项 TTS 分句单测；当前 55 项单测、Lint 0 issue、debug APK 可构建
+- 新增 5 项 TTS 分句单测与 2 项目录创建单测；当前 57 项单测、Lint 0 issue、debug APK 可构建
 
 P5 尚未完成：P5-14 真机测试（当前无真机/模拟器，回声、延迟、打断、1h 耗电待验证）；P5-06 sherpa-onnx TTS 首版按可选不启用。真机清单见 `docs/P5-14_通话真机测试报告.md`。
 
