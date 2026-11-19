@@ -10,6 +10,7 @@ data class VoskModelSpec(
     val downloadUrl: String,
     val archiveBytes: Long,
     val sha256: String,
+    /** ZIP 内的第一层目录名，必须与官方压缩包一致，不能等同于安装目录 id。 */
     val rootDirName: String,
     val requiredPaths: List<String>,
 ) {
@@ -22,7 +23,7 @@ data class VoskModelSpec(
             downloadUrl = "https://alphacephei.com/vosk/models/vosk-model-small-cn-0.22.zip",
             archiveBytes = 43_898_754L,
             sha256 = "3af8b0e7e0f835ae9d414ce5df580237a3cfb08d586c9fbbb0f7ff29ad5b14ba",
-            rootDirName = SMALL_CN_ID,
+            rootDirName = "vosk-model-small-cn-0.22",
             requiredPaths = listOf(
                 "am/final.mdl",
                 "conf/mfcc.conf",

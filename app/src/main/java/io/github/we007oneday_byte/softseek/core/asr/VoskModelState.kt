@@ -12,6 +12,9 @@ sealed interface VoskModelState {
 
     data object Extracting : VoskModelState
 
+    /** 完整安装包已在本地缓存，点击即可跳过下载直接校验/解压。 */
+    data object ArchiveReady : VoskModelState
+
     data class Installed(val modelDir: String) : VoskModelState
 
     data class Failed(

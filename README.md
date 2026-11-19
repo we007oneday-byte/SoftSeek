@@ -13,21 +13,22 @@ P5 已完成：
 - 通话权限基线：`RECORD_AUDIO`、`POST_NOTIFICATIONS`、`FOREGROUND_SERVICE`、`FOREGROUND_SERVICE_MICROPHONE`、`MODIFY_AUDIO_SETTINGS`、`WAKE_LOCK`；麦克风声明为可选硬件
 - Vosk 0.3.47 接入；`AsrEngine` 稳定接口（partial/final/error）
 - `VoskModelSpec` 固化 small-cn 42MB 模型 URL、大小 `43,898,754`、SHA-256 `3af8b0e7…5b14ba` 与必需文件清单
-- 模型管理：Range 断点续传、大小/SHA-256 校验、zip slip/条目数量/解压体积防护、staging 解压后原子替换；失败保留 `.part`
-- 设置页“离线识别模型”支持下载进度、取消、失败重试；模型安装在 `filesDir/models/vosk-model-small-cn-0.22`
+- 模型管理：Range 断点续传、3 次网络重试、大小/SHA-256 校验、zip slip/条目数量/解压体积防护、staging 解压后原子替换；失败保留 `.part`
+- 设置页“离线识别模型”支持下载进度、取消、失败重试、**从本地 ZIP 导入**；自动扫描两种已有模型目录，完整安装包在缓存时提示“点击继续安装”；模型安装在 `filesDir/models/vosk-small-cn-0.22`
 - Vosk 流式识别：`Recognizer.acceptWaveForm` 端点检测、partial 去重、final 输出、句尾 reset、错误事件
 - AudioRecord：16kHz/16bit/mono，优先 `VOICE_COMMUNICATION`，回退 `MIC`，可用时显式启用 `AcousticEchoCanceler`
 - 系统 TTS 封装：中文语言检测、语速/音调、stop/release、逐句回调；设置页提供试听入口
 - 通话状态机：Dialing/Listening/Thinking/Speaking/Ended/Error，半双工录音；ASR Final 触发 `ChatRepository` 流式回复，回复完成后系统 TTS 播报，播报结束回到 Listening；支持键盘输入、静音、挂断释放
-- 通话页：麦克风权限请求、状态/时长、partial 与双方字幕、静音/免提/键盘/挂断按钮、键盘发送、停止生成/打断播报、错误提示
+- 无 API Key 本地自检：不调用 `ChatRepository`，仍启动麦克风、Vosk 与 TTS，用固定警告完成首次链路验证
+- 通话页：进入页面先申请 `RECORD_AUDIO`，授权后才初始化通话；状态/时长、partial 与双方字幕、静音/免提/键盘/挂断按钮、键盘发送、停止生成/打断播报、错误提示
 - TTS 分句队列：句末标点切分、80 字硬切、`QUEUE_ADD` 续播、按 utteranceId 过滤 Done/Error，避免旧播报回调误触发
 - 音频模式：`MODE_IN_COMMUNICATION`、音频焦点、听筒/免提切换（Android 12+ 走 `setCommunicationDevice`，旧版回退），挂断恢复原模式/路由
 - 前台服务：`microphone` 类型、常驻通知、2 小时 Partial WakeLock；通话开始时启动，挂断/异常时释放
 - 接近传感器：贴近时调暗屏幕并移除 `KEEP_SCREEN_ON`，离开恢复亮度与常亮
 - 通话会话固定 `ReasoningEffort.LOW`、输出上限 4096，写入记忆池配置；挂断后会话保留在列表，聊天参数不受影响
-- 新增 5 项 TTS 分句单测与 2 项目录创建单测；当前 57 项单测、Lint 0 issue、debug APK 可构建
+- 新增 5 项 TTS 分句、2 项目录创建、1 项 ZIP 根目录兼容、2 项模型自动检测单测；当前 60 项单测、Lint 0 issue、debug APK 可构建
 
-P5 尚未完成：P5-14 真机测试（当前无真机/模拟器，回声、延迟、打断、1h 耗电待验证）；P5-06 sherpa-onnx TTS 首版按可选不启用。真机清单见 `docs/P5-14_通话真机测试报告.md`。
+P5 尚未完成：P5-14 真机测试（用户手动验收中，回声、延迟、打断、1h 耗电待验证）；P5-06 sherpa-onnx TTS 首版按可选不启用。真机清单见 `docs/P5-14_通话真机测试报告.md`。
 
 **阶段 4：多模态、模型与设置（P4，已完成）**
 
@@ -59,7 +60,7 @@ P5 尚未完成：P5-14 真机测试（当前无真机/模拟器，回声、延�
 - 测试 40 项；整体行覆盖率 82.9%（704/849），分支 51.1%（135/264）
 - Android Lint 0 issue、ktlint、JVM 单测、GitHub Actions CI
 
-尚未接入：生物识别解锁 Key、会话导入导出、Vosk 语音与 TTS 通话。按任务书 P5～P7 推进。
+尚未接入：生物识别解锁 Key、会话导入导出。P5 通话与离线语音基础链路已落地，真机验收后进入 P6。
 
 ## 技术栈
 

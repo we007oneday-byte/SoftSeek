@@ -15,7 +15,19 @@ import java.util.zip.ZipInputStream
 class VoskModelStore(
     private val modelsDir: File,
 ) {
-    fun modelDir(spec: VoskModelSpec): File = File(modelsDir, spec.rootDirName)
+    /** 安装目录用稳定的 spec.id；rootDirName 只表示 ZIP 内部的根目录。 */
+    fun modelDir(spec: VoskModelSpec): File = File(modelsDir, spec.id)
+
+    /**
+     * 兼容旧版本/手动放入的两种目录名：安装 ID 和官方 ZIP 根目录。
+     * 只要必要文件齐全就视为已安装，避免重复下载或重复解压。
+     */
+    fun installedDir(spec: VoskModelSpec): File? =
+        listOf(File(modelsDir, spec.id), File(modelsDir, spec.rootDirName))
+            .distinctBy { it.absolutePath }
+            .firstOrNull { dir ->
+                dir.isDirectory && spec.requiredPaths.all { File(dir, it).isFile }
+            }
 
     fun archivePart(spec: VoskModelSpec): File = File(modelsDir, "${spec.id}.zip.part")
 
@@ -29,16 +41,15 @@ class VoskModelStore(
     }
 
     fun inspect(spec: VoskModelSpec): VoskModelState =
-        if (isInstalled(spec)) {
-            VoskModelState.Installed(modelDir(spec).absolutePath)
+        installedDir(spec)?.let {
+            VoskModelState.Installed(it.absolutePath)
+        } ?: if (archivePart(spec).let { archive -> archive.isFile && archive.length() == spec.archiveBytes }) {
+            VoskModelState.ArchiveReady
         } else {
             VoskModelState.NotInstalled
         }
 
-    fun isInstalled(spec: VoskModelSpec): Boolean {
-        val dir = modelDir(spec)
-        return dir.isDirectory && spec.requiredPaths.all { File(dir, it).isFile }
-    }
+    fun isInstalled(spec: VoskModelSpec): Boolean = installedDir(spec) != null
 
     fun verifyArchive(
         archive: File,

@@ -16,6 +16,7 @@ import io.github.we007oneday_byte.softseek.core.tts.TtsEvent
 import io.github.we007oneday_byte.softseek.core.tts.TtsQueueMode
 import io.github.we007oneday_byte.softseek.core.tts.TtsTextSplitter
 import io.github.we007oneday_byte.softseek.data.settings.SettingsRepository
+import io.github.we007oneday_byte.softseek.domain.auth.ApiKeyStore
 import io.github.we007oneday_byte.softseek.domain.model.ChatSendEvent
 import io.github.we007oneday_byte.softseek.domain.model.MemoryPoolConfig
 import io.github.we007oneday_byte.softseek.domain.model.ReasoningEffort
@@ -61,6 +62,7 @@ data class CallUiState(
     val speakerOn: Boolean = false,
     val inputText: String = "",
     val showKeyboard: Boolean = false,
+    val selfTestMode: Boolean = false,
 )
 
 /**
@@ -79,6 +81,7 @@ class CallViewModel
         private val conversationRepository: ConversationRepository,
         private val memoryPoolRepository: MemoryPoolRepository,
         private val settingsRepository: SettingsRepository,
+        private val apiKeyStore: ApiKeyStore,
     ) : ViewModel() {
         private val _uiState = MutableStateFlow(CallUiState())
         val uiState: StateFlow<CallUiState> = _uiState.asStateFlow()
@@ -129,23 +132,27 @@ class CallViewModel
             viewModelScope.launch {
                 try {
                     val settings = settingsRepository.settings.value
-                    val conversation = conversationRepository.createConversation(
-                        title = callTitle(),
-                        modelName = settings.defaultModel,
-                        reasoningEffort = ReasoningEffort.LOW,
-                        maxOutputTokens = minOf(settings.defaultMaxOutputTokens, CALL_MAX_OUTPUT_TOKENS),
-                    )
-                    conversationId = conversation.id
-                    memoryPoolRepository.upsertConfig(
-                        MemoryPoolConfig.defaults(conversation.id, System.currentTimeMillis()).copy(
-                            maxInputTokens = settings.defaultMaxInputTokens,
-                            enableAutoCleanup = settings.autoCleanup,
-                            cleanupThresholdCount = settings.cleanupThresholdCount,
-                            cleanupProtectionHours = settings.cleanupProtectionHours,
-                            deletedRetentionDays = settings.deletedRetentionDays,
-                            imageDetail = settings.imageDetail,
-                        ),
-                    )
+                    val hasApiKey = !apiKeyStore.apiKey.value.isNullOrBlank()
+                    _uiState.update { it.copy(selfTestMode = !hasApiKey) }
+                    if (hasApiKey) {
+                        val conversation = conversationRepository.createConversation(
+                            title = callTitle(),
+                            modelName = settings.defaultModel,
+                            reasoningEffort = ReasoningEffort.LOW,
+                            maxOutputTokens = minOf(settings.defaultMaxOutputTokens, CALL_MAX_OUTPUT_TOKENS),
+                        )
+                        conversationId = conversation.id
+                        memoryPoolRepository.upsertConfig(
+                            MemoryPoolConfig.defaults(conversation.id, System.currentTimeMillis()).copy(
+                                maxInputTokens = settings.defaultMaxInputTokens,
+                                enableAutoCleanup = settings.autoCleanup,
+                                cleanupThresholdCount = settings.cleanupThresholdCount,
+                                cleanupProtectionHours = settings.cleanupProtectionHours,
+                                deletedRetentionDays = settings.deletedRetentionDays,
+                                imageDetail = settings.imageDetail,
+                            ),
+                        )
+                    }
 
                     val engine = asrEngineFactory.create().getOrElse { throw it }
                     asrEngine = engine
@@ -203,6 +210,12 @@ class CallViewModel
         fun sendText() {
             val text = _uiState.value.inputText.trim()
             if (text.isEmpty()) return
+            if (_uiState.value.phase == CallPhase.DIALING || _uiState.value.phase == CallPhase.ERROR) {
+                _uiState.update {
+                    it.copy(error = "通话尚未就绪，请先授予麦克风权限并等待离线模型加载。")
+                }
+                return
+            }
             _uiState.update { it.copy(inputText = "", showKeyboard = false) }
             handleUserText(text)
         }
@@ -333,6 +346,10 @@ class CallViewModel
         private fun handleUserText(raw: String) {
             val text = raw.trim()
             if (text.isEmpty() || busy || ended) return
+            if (_uiState.value.selfTestMode || conversationId == null) {
+                runSelfTestReply(text)
+                return
+            }
             busy = true
             stopCapture()
             _uiState.update {
@@ -387,6 +404,40 @@ class CallViewModel
                             error = error.message ?: "生成回复失败",
                         )
                     }
+                } finally {
+                    busy = false
+                    if (!ended && _uiState.value.phase != CallPhase.ERROR) {
+                        startListening()
+                    }
+                }
+            }
+        }
+
+        /**
+         * 未配置 API Key 时的本地自检：不调用 ChatRepository，用固定警告验证
+         * 麦克风 -> 离线 ASR -> 字幕 -> TTS 的完整链路。
+         */
+        private fun runSelfTestReply(text: String) {
+            busy = true
+            stopCapture()
+            _uiState.update {
+                it.copy(
+                    phase = CallPhase.THINKING,
+                    lastUserText = text,
+                    partialText = "",
+                    assistantText = "",
+                    error = null,
+                    inputText = "",
+                    showKeyboard = false,
+                )
+            }
+            sendJob = viewModelScope.launch {
+                try {
+                    delay(SELF_TEST_THINKING_MILLIS)
+                    _uiState.update { it.copy(assistantText = SELF_TEST_WARNING) }
+                    speakAndWait(SELF_TEST_WARNING)
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } finally {
                     busy = false
                     if (!ended && _uiState.value.phase != CallPhase.ERROR) {
@@ -457,5 +508,8 @@ class CallViewModel
             const val CALL_MAX_OUTPUT_TOKENS = 4_096
             const val TTS_TIMEOUT_MILLIS = 90_000L
             const val TTS_TIMEOUT_PER_SENTENCE_MILLIS = 20_000L
+            const val SELF_TEST_THINKING_MILLIS = 300L
+            const val SELF_TEST_WARNING =
+                "当前未配置 API Key，这是本地语音自检提示。麦克风、离线识别和语音播报已经正常工作；配置 API Key 后即可进行真正的对话。"
         }
     }

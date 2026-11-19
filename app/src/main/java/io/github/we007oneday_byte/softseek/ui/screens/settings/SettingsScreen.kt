@@ -1,5 +1,7 @@
 package io.github.we007oneday_byte.softseek.ui.screens.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -30,6 +32,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -82,6 +85,14 @@ fun SettingsScreen(
     val baseUrlError by viewModel.baseUrlError.collectAsStateWithLifecycle()
     var showKeyManager by remember { mutableStateOf(false) }
     var showBaseUrl by remember { mutableStateOf(false) }
+    val importAsrModelLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument(),
+    ) { uri ->
+        if (uri != null) viewModel.importAsrModel(uri)
+    }
+    LaunchedEffect(Unit) {
+        viewModel.refreshAsrModel()
+    }
     var showProxy by remember { mutableStateOf(false) }
     var showConnectTimeout by remember { mutableStateOf(false) }
     var showReadTimeout by remember { mutableStateOf(false) }
@@ -231,6 +242,23 @@ fun SettingsScreen(
                                 },
                             ),
                         )
+                        if (asrModelState !is VoskModelState.Installed) {
+                            add(
+                                SettingsEntry(
+                                    title = stringResource(R.string.settings_asr_model_import),
+                                    subtitle = stringResource(R.string.settings_asr_model_import_value),
+                                    onClick = {
+                                        importAsrModelLauncher.launch(
+                                            arrayOf(
+                                                "application/zip",
+                                                "application/x-zip-compressed",
+                                                "application/octet-stream",
+                                            ),
+                                        )
+                                    },
+                                ),
+                            )
+                        }
                         if (
                             asrModelState is VoskModelState.Downloading ||
                             asrModelState is VoskModelState.Verifying ||
@@ -1072,6 +1100,7 @@ private fun asrModelSubtitle(state: VoskModelState): String = when (state) {
     }
     VoskModelState.Verifying -> stringResource(R.string.settings_asr_model_verifying)
     VoskModelState.Extracting -> stringResource(R.string.settings_asr_model_extracting)
+    VoskModelState.ArchiveReady -> stringResource(R.string.settings_asr_model_archive_ready)
     is VoskModelState.Installed -> stringResource(R.string.settings_asr_model_installed)
     is VoskModelState.Failed -> stringResource(R.string.settings_asr_model_failed, state.message)
 }

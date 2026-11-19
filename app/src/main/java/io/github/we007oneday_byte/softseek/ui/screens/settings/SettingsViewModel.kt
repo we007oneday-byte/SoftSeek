@@ -1,5 +1,6 @@
 package io.github.we007oneday_byte.softseek.ui.screens.settings
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -228,6 +229,14 @@ class SettingsViewModel
 
         fun installAsrModel() {
             voskModelManager.install()
+        }
+
+        fun refreshAsrModel() {
+            voskModelManager.refresh()
+        }
+
+        fun importAsrModel(uri: Uri) {
+            voskModelManager.installFromUri(uri)
         }
 
         fun cancelAsrModelInstall() {

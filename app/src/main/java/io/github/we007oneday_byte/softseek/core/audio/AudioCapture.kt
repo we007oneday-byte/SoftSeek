@@ -30,6 +30,7 @@ class AudioCapture(
             MediaRecorder.AudioSource.VOICE_COMMUNICATION,
             MediaRecorder.AudioSource.MIC,
         )
+        var lastError: Exception? = null
         for (source in sources) {
             var candidate: AudioRecord? = null
             try {
@@ -57,12 +58,16 @@ class AudioCapture(
                 candidate = null
                 record?.release()
                 record = null
-                if (source == sources.last()) {
-                    return Result.failure(error)
-                }
+                lastError = error
             }
         }
-        return Result.failure(IllegalStateException("没有可用的录音输入"))
+        val reason = lastError?.message ?: "设备不支持 16kHz 单声道采集"
+        return Result.failure(
+            IllegalStateException(
+                "无法启动麦克风：$reason。请确认已授予麦克风权限，且没有被其他应用占用。",
+                lastError,
+            ),
+        )
     }
 
     @SuppressLint("MissingPermission")

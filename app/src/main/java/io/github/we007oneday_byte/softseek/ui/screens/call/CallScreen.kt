@@ -4,12 +4,14 @@ import android.Manifest
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
 import android.hardware.SensorManager
 import android.os.Build
+import android.provider.Settings
 import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -54,6 +56,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
+import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.we007oneday_byte.softseek.R
@@ -64,24 +67,38 @@ fun CallScreen(onEndCall: () -> Unit) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
     var permissionDenied by remember { mutableStateOf(false) }
+    val notificationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+    ) { }
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
     ) { granted ->
         if (granted) {
+            permissionDenied = false
             viewModel.startCall()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
         } else {
             permissionDenied = true
         }
     }
-    val notificationLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission(),
-    ) { }
     LaunchedEffect(Unit) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) ==
             PackageManager.PERMISSION_GRANTED
         ) {
-            notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            viewModel.startCall()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+                PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        } else {
+            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
     DisposableEffect(Unit) {
@@ -120,7 +137,13 @@ fun CallScreen(onEndCall: () -> Unit) {
             Text(
                 text = when (state.phase) {
                     CallPhase.DIALING -> "正在准备离线模型与麦克风…"
-                    CallPhase.LISTENING -> if (state.muted) "已静音" else "正在聆听…"
+                    CallPhase.LISTENING -> if (state.muted) {
+                        "已静音"
+                    } else if (state.selfTestMode) {
+                        "正在聆听 · 本地自检"
+                    } else {
+                        "正在聆听…"
+                    }
                     CallPhase.THINKING -> "思考中…"
                     CallPhase.SPEAKING -> "正在回答…"
                     CallPhase.ENDED -> "通话已结束"
@@ -130,6 +153,15 @@ fun CallScreen(onEndCall: () -> Unit) {
                 color = Color.White.copy(alpha = 0.9f),
                 textAlign = TextAlign.Center,
             )
+            if (state.selfTestMode) {
+                Spacer(Modifier.height(10.dp))
+                Text(
+                    text = "本地自检模式 · 未配置 API Key\n说一句话，将用固定提示验证麦克风、离线识别和 TTS。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFFFFD180),
+                    textAlign = TextAlign.Center,
+                )
+            }
             Spacer(Modifier.height(20.dp))
             if (state.partialText.isNotBlank()) {
                 Text(
@@ -160,11 +192,27 @@ fun CallScreen(onEndCall: () -> Unit) {
             if (permissionDenied) {
                 Spacer(Modifier.height(12.dp))
                 Text(
-                    text = "需要麦克风权限才能通话；可在系统设置中重新授权。",
+                    text = "需要麦克风权限才能通话；授权后才能启动离线识别。",
                     style = MaterialTheme.typography.bodySmall,
                     color = Color(0xFFFF8A80),
                     textAlign = TextAlign.Center,
                 )
+                TextButton(
+                    onClick = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                ) {
+                    Text("重新授权麦克风")
+                }
+                TextButton(
+                    onClick = {
+                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                            data = "package:${context.packageName}".toUri()
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(intent)
+                    },
+                ) {
+                    Text("打开系统设置")
+                }
             }
 
             Spacer(Modifier.weight(1f))
@@ -179,8 +227,10 @@ fun CallScreen(onEndCall: () -> Unit) {
                 TextButton(
                     onClick = viewModel::sendText,
                     enabled = state.inputText.isNotBlank() &&
+                        state.phase != CallPhase.DIALING &&
                         state.phase != CallPhase.THINKING &&
                         state.phase != CallPhase.SPEAKING &&
+                        state.phase != CallPhase.ERROR &&
                         state.phase != CallPhase.ENDED,
                     modifier = Modifier.align(Alignment.End),
                 ) {
@@ -228,7 +278,9 @@ fun CallScreen(onEndCall: () -> Unit) {
                 Button(
                     onClick = viewModel::toggleKeyboard,
                     modifier = Modifier.weight(1f),
-                    enabled = state.phase != CallPhase.ENDED,
+                    enabled = state.phase != CallPhase.DIALING &&
+                        state.phase != CallPhase.ENDED &&
+                        state.phase != CallPhase.ERROR,
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color.White.copy(alpha = 0.14f),
                         contentColor = Color.White,

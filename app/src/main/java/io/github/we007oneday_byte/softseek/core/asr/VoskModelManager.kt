@@ -1,12 +1,14 @@
 package io.github.we007oneday_byte.softseek.core.asr
 
 import android.content.Context
+import android.net.Uri
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -31,7 +33,7 @@ import javax.inject.Singleton
 class VoskModelManager
     @Inject
     constructor(
-        @ApplicationContext context: Context,
+        @ApplicationContext private val context: Context,
         private val okHttpClient: OkHttpClient,
     ) {
         private val store = VoskModelStore(File(context.filesDir, "models"))
@@ -59,6 +61,19 @@ class VoskModelManager
             }
         }
 
+        /**
+         * 从系统文件选择器导入官方 ZIP，不依赖网络。
+         * 导入包仍然执行大小 + SHA-256 校验，避免装错模型。
+         */
+        fun installFromUri(uri: Uri) {
+            if (installJob?.isActive == true) return
+            installJob = scope.launch {
+                mutex.withLock {
+                    importInternal(uri)
+                }
+            }
+        }
+
         fun cancelInstall() {
             currentCall?.cancel()
             currentCall = null
@@ -69,25 +84,22 @@ class VoskModelManager
 
         suspend fun ensureInstalled(): Result<File> =
             mutex.withLock {
-                if (store.isInstalled(spec)) {
-                    Result.success(store.modelDir(spec))
-                } else {
-                    installInternal()
-                }
+                store.installedDir(spec)?.let { return@withLock Result.success(it) }
+                installInternal()
             }
 
         private suspend fun installInternal(): Result<File> {
             try {
-                if (store.isInstalled(spec)) {
-                    _state.value = VoskModelState.Installed(store.modelDir(spec).absolutePath)
-                    return Result.success(store.modelDir(spec))
+                store.installedDir(spec)?.let { installed ->
+                    _state.value = VoskModelState.Installed(installed.absolutePath)
+                    return Result.success(installed)
                 }
 
                 val archive = store.archivePart(spec)
                 if (archive.exists() && archive.length() > spec.archiveBytes) {
                     archive.delete()
                 }
-                download(archive)
+                downloadWithRetry(archive)
 
                 _state.value = VoskModelState.Verifying
                 val verification = store.verifyArchive(archive, spec)
@@ -111,11 +123,77 @@ class VoskModelManager
                 throw cancelled
             } catch (error: Exception) {
                 _state.value = VoskModelState.Failed(
-                    message = error.message ?: "模型安装失败",
+                    message = if (error is IOException) {
+                        "模型下载网络中断：${error.message ?: "连接被中断"}。可重试，或从本地 ZIP 导入。"
+                    } else {
+                        error.message ?: "模型安装失败"
+                    },
                     retryable = true,
                 )
                 return Result.failure(error)
             }
+        }
+
+        /**
+         * 把用户通过系统文件选择器选中的官方 ZIP 复制到私有缓存，
+         * 再走与下载完全一致的 size + SHA-256 校验和安全解压流程。
+         */
+        private suspend fun importInternal(uri: Uri): Result<File> {
+            val temp = File(context.cacheDir, "vosk-import-${System.currentTimeMillis()}.zip")
+            try {
+                store.installedDir(spec)?.let { installed ->
+                    _state.value = VoskModelState.Installed(installed.absolutePath)
+                    return Result.success(installed)
+                }
+                context.cacheDir.mkdirs()
+                _state.value = VoskModelState.Verifying
+                val input = context.contentResolver.openInputStream(uri)
+                    ?: throw IOException("无法读取所选 ZIP 文件")
+                input.use { source ->
+                    temp.outputStream().use { target ->
+                        source.copyTo(target, BUFFER_SIZE)
+                    }
+                }
+                val verification = store.verifyArchive(temp, spec)
+                if (verification.isFailure) {
+                    throw verification.exceptionOrNull()
+                        ?: IllegalStateException("模型校验失败")
+                }
+                _state.value = VoskModelState.Extracting
+                val extracted = store.extractArchive(temp, spec)
+                    .getOrElse { throw it }
+                _state.value = VoskModelState.Installed(extracted.absolutePath)
+                return Result.success(extracted)
+            } catch (cancelled: CancellationException) {
+                _state.value = store.inspect(spec)
+                throw cancelled
+            } catch (error: Exception) {
+                _state.value = VoskModelState.Failed(
+                    message = "本地模型导入失败：${error.message ?: "文件无法读取"}",
+                    retryable = false,
+                )
+                return Result.failure(error)
+            } finally {
+                temp.delete()
+            }
+        }
+
+        private suspend fun downloadWithRetry(archive: File) {
+            var lastError: IOException? = null
+            for (attempt in 1..MAX_DOWNLOAD_ATTEMPTS) {
+                try {
+                    download(archive)
+                    return
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
+                } catch (error: IOException) {
+                    lastError = error
+                    if (attempt < MAX_DOWNLOAD_ATTEMPTS) {
+                        delay(RETRY_DELAY_BASE_MILLIS * attempt)
+                    }
+                }
+            }
+            throw lastError ?: IOException("模型下载失败")
         }
 
         private suspend fun download(archive: File) {
@@ -128,12 +206,14 @@ class VoskModelManager
 
             val request = Request.Builder()
                 .url(spec.downloadUrl)
+                .header("User-Agent", "SoftSeek-Android")
+                .header("Accept", "*/*")
                 .apply {
                     if (existing > 0L) header("Range", "bytes=$existing-")
                 }
                 .build()
             val client = okHttpClient.newBuilder()
-                .readTimeout(0, TimeUnit.MILLISECONDS)
+                .readTimeout(DOWNLOAD_READ_TIMEOUT_SECONDS, TimeUnit.SECONDS)
                 .build()
 
             _state.value = VoskModelState.Downloading(existing, spec.archiveBytes)
@@ -174,5 +254,8 @@ class VoskModelManager
 
         companion object {
             private const val BUFFER_SIZE = 8 * 1024
+            private const val MAX_DOWNLOAD_ATTEMPTS = 3
+            private const val RETRY_DELAY_BASE_MILLIS = 1_500L
+            private const val DOWNLOAD_READ_TIMEOUT_SECONDS = 60L
         }
     }
