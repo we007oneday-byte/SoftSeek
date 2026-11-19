@@ -521,7 +521,7 @@ Speaking → Interrupted(VAD 命中) → Listening
 
 #### 5.9.2 版本号、发布性质与包命名
 
-**版本号**采用 SemVer：`MAJOR.MINOR.PATCH`；预发布追加 `-beta.N`。Android `versionCode` 必须单调递增，不能回退。建议 `versionCode = MAJOR*1_000_000 + MINOR*10_000 + PATCH*100 + 通道位`，正式版通道位 `99`，测试版取 `1..98`（beta 序号），确保同版本正式版始终高于 beta，且后续补丁版继续递增。
+**版本号**采用 SemVer：`MAJOR.MINOR.PATCH`；预发布追加 `-beta.N`。Android `versionCode` 必须单调递增，不能回退。建议 `versionCode = MAJOR*1_000_000 + MINOR*10_000 + PATCH*100 + 通道位`，正式版通道位 `99`，测试版取 `1..98`（beta 序号），确保同版本正式版始终高于 beta，且后续补丁版继续递增。该公式约束 `MINOR`/`PATCH` 不超过 99；超出或需要热修时改用 CI 维护的单调递增序号。
 
 **发布性质**只允许两种：
 
