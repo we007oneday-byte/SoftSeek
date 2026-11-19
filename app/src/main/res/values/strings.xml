@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SOFTSEEK</string>
+    <string name="app_subtitle">非官方 DeepSeek 客户端</string>
+    <string name="chat_title">SOFTSEEK</string>
+    <string name="new_chat">新建对话</string>
+    <string name="conversations">会话</string>
+    <string name="no_conversations">暂无会话</string>
+    <string name="settings">设置</string>
+    <string name="open_conversations">打开会话列表</string>
+    <string name="open_call">打开通话</string>
+    <string name="more">更多</string>
+    <string name="input_hint">输入消息…</string>
+    <string name="send">发送</string>
+    <string name="attach">附件</string>
+    <string name="not_configured">尚未配置 API Key</string>
+    <string name="configure_api">去配置</string>
+    <string name="disclaimer">本应用为第三方客户端，非 DeepSeek 官方应用。所有 AI 服务由 DeepSeek 官方提供。</string>
+    <string name="empty_chat_desc">纯原生 Android 第三方 DeepSeek 客户端</string>
+    <string name="empty_chat_hint">配置 API Key 后开始对话</string>
+    <string name="settings_api">API 配置</string>
+    <string name="settings_api_key">API 密钥管理</string>
+    <string name="settings_base_url">Base URL</string>
+    <string name="settings_model">模型参数</string>
+    <string name="settings_chat">聊天设置</string>
+    <string name="settings_call">通话设置</string>
+    <string name="settings_memory">记忆存储</string>
+    <string name="settings_appearance">外观设置</string>
+    <string name="settings_data">数据管理</string>
+    <string name="settings_about">关于</string>
+    <string name="settings_placeholder">阶段 1 占位，后续接入</string>
+    <string name="guide_welcome">欢迎使用 SOFTSEEK</string>
+    <string name="guide_desc">SOFTSEEK 是一个纯 Android 原生、零服务端的第三方 DeepSeek 客户端。你需要自行准备 DeepSeek API Key。</string>
+    <string name="guide_start">开始使用</string>
+    <string name="call_title">AI 通话</string>
+    <string name="call_placeholder">通话功能将在阶段 5 接入</string>
+    <string name="end_call">挂断</string>
+    <string name="back">返回</string>
+</resources>
