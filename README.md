@@ -6,13 +6,13 @@ SOFTSEEK（SK）是一个纯 Android 原生、Kotlin + Jetpack Compose 的 DeepS
 
 ## 当前状态
 
-**阶段 3：API 接入与基础聊天（P3）**
+**阶段 4：多模态、模型与设置（P4）**
 
 已完成：
 
 - Android 工程骨架、Gradle 版本目录、Compose 主题与导航
 - Hilt 依赖注入（`@HiltAndroidApp`、`AppInfo`）
-- 主题三模式（跟随系统 / 浅色 / 深色），设置页可循环切换
+- 主题：跟随系统 / 浅色 / 深色，动态取色、字号缩放、气泡圆角、代码块主题
 - 自适应启动图标（含 monochrome）与 SplashScreen
 - Room 四张表：`memory_pool_blocks`、`memory_heap_nodes`、`message_attachments`、`memory_pool_config`
 - 外键级联、`tags` JSON 转换、枚举转换、`schema` 导出到 `app/schemas/`
@@ -22,19 +22,21 @@ SOFTSEEK（SK）是一个纯 Android 原生、Kotlin + Jetpack Compose 的 DeepS
 - 回收站：`deletedAt` 生效，每日 Worker 永久删除超过 7 天的池块
 - 上下文拼装：系统提示、倒序截断、剥离 reasoning、图片按 384 tokens 估算
 - Token 估算与 usage 校准
+- DataStore 设置体系：单 JSON 键持久化，8 组设置即时生效、重启保留
+- API Key：Android Keystore AES/GCM 加密、多 Key、备注、切换、删除，明文不落盘
+- 模型：`/models` 刷新与缓存，`deepseek-flash`（文本+图片）与 `deepseek-v4-pro`（纯文本）能力灰显
+- 模型/思考档位/最大输出可在会话内切换；参数预设保存、应用、删除、JSON 导出
+- 图片：PhotoPicker 多选、EXIF 旋转、长边 1568、JPEG 85、最多 8 张、100MB 缓存上限
+- 视觉请求：`content` 数组 + `image_url.detail`，单图 6MB 体积校验；缩略图、全屏预览、待发送删除
 - DeepSeek API Provider 抽象、DTO、Retrofit/OkHttp 网络层
 - `POST /chat/completions` 流式 SSE 解析：content、reasoning_content、finish_reason、usage、`[DONE]`
-- Base URL 强制 HTTPS 校验；连接 15s、普通读取 60s、流式读取 0
-- HTTP 错误映射：401/403、402、429、5xx、400 与网络/协议异常
-- 聊天状态机：发送、流式增量、停止（保留 partial）、重新生成、失败落库
-- 会话抽屉：列表、切换、新建、重命名、置顶、软删
-- 消息气泡：思考块折叠、Markdown/代码块、复制/分享/编辑/删除、token 与错误展示
-- 会话标题按首条消息本地截断；会话导出为纯文本分享
-- 设置页 API Key 输入（当前版本仅保存在内存，重启后失效；P4-08 接 Keystore）
-- Robolectric + Room in-memory + SSE/DTO/仓储测试 37 项；P3 整体行覆盖率 86.1%（681/791），分支 54.0%（134/248）
+- Base URL 强制 HTTPS；代理、连接/读取/写入超时可配置，下一次请求生效
+- 余额、今日/本月/累计 token 用量与预警阈值
+- 设置页 8 组：API / 模型 / 聊天 / 通话 / 记忆 / 外观 / 数据 / 关于
+- 测试 40 项；整体行覆盖率 82.9%（704/849），分支 51.1%（135/264）
 - Android Lint 0 issue、ktlint、JVM 单测、GitHub Actions CI
 
-尚未接入：API Key 加密持久化、附件/图片消息、DataStore、Vosk、导入导出。按任务书 P4～P7 推进。
+尚未接入：生物识别解锁 Key、会话导入导出、Vosk 语音与 TTS 通话。按任务书 P5～P7 推进。
 
 ## 技术栈
 
@@ -42,6 +44,8 @@ SOFTSEEK（SK）是一个纯 Android 原生、Kotlin + Jetpack Compose 的 DeepS
 - Jetpack Compose（BOM 2024.10.01，Material3）
 - Navigation Compose 2.7.7
 - Room 2.7.2 + KSP
+- DataStore Preferences 1.1.1
+- Coil 2.7.0、ExifInterface 1.3.7
 - WorkManager 2.10.0 + Hilt Worker
 - Retrofit 2.11.0 + OkHttp 4.12.0 + kotlinx.serialization 1.7.3
 - AGP 8.9.0 / Gradle 8.11.1
@@ -76,10 +80,12 @@ app/src/main/java/io/github/we007oneday_byte/softseek/
 ├── ChatApp.kt
 ├── MainActivity.kt
 ├── core/
-│   ├── auth/               # P3 内存 API Key Store（P4 换 Keystore）
+│   ├── auth/               # Keystore AES/GCM 多 Key
 │   ├── constant/AppConstants.kt
+│   ├── image/              # ImageProcessor（压缩/缓存）
 │   ├── model/AppInfo.kt
-│   └── network/            # BaseUrlValidator
+│   ├── network/            # BaseUrlValidator / DynamicApiFactory
+│   └── settings/           # AppSettings / ParameterPreset
 ├── data/
 │   ├── cleanup/            # CleanupEngine
 │   ├── local/
@@ -88,7 +94,9 @@ app/src/main/java/io/github/we007oneday_byte/softseek/
 │   │   ├── converter/      # tags / 枚举 TypeConverter
 │   │   └── AppDatabase.kt
 │   ├── remote/             # DeepSeekApi / DTO / SSE / Provider
-│   ├── repository/         # Room 仓储 + DefaultChatRepository
+│   ├── repository/         # Room 仓储 + DefaultChatRepository + UsageRepository
+│   ├── settings/           # DataStore SettingsRepository
+│   ├── model/              # ModelCatalog
 │   └── worker/             # 回收站清理 Worker
 ├── di/                     # AppModule / DatabaseModule / NetworkModule / ProviderModule / AuthModule
 ├── domain/

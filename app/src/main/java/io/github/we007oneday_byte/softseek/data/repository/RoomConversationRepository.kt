@@ -67,6 +67,16 @@ class RoomConversationRepository
             blockDao.setPinned(poolId, pinned, now)
         }
 
+        override suspend fun updateConfig(
+            poolId: String,
+            modelName: String,
+            reasoningEffort: ReasoningEffort,
+            maxOutputTokens: Int,
+            now: Long,
+        ) {
+            blockDao.updateConfig(poolId, modelName, reasoningEffort, maxOutputTokens, now)
+        }
+
         override suspend fun softDeleteConversation(poolId: String, now: Long) {
             blockDao.softDelete(poolId, now, now)
         }

@@ -3,7 +3,9 @@ package io.github.we007oneday_byte.softseek.data.repository
 import io.github.we007oneday_byte.softseek.domain.auth.ApiKeyStore
 import io.github.we007oneday_byte.softseek.domain.context.ContextAssembler
 import io.github.we007oneday_byte.softseek.domain.model.AiChatRequest
+import io.github.we007oneday_byte.softseek.domain.model.AiImage
 import io.github.we007oneday_byte.softseek.domain.model.AiMessage
+import io.github.we007oneday_byte.softseek.domain.model.AttachmentType
 import io.github.we007oneday_byte.softseek.domain.model.ChatError
 import io.github.we007oneday_byte.softseek.domain.model.ChatFinishReason
 import io.github.we007oneday_byte.softseek.domain.model.ChatMessage
@@ -11,6 +13,8 @@ import io.github.we007oneday_byte.softseek.domain.model.ChatSendEvent
 import io.github.we007oneday_byte.softseek.domain.model.ChatStreamEvent
 import io.github.we007oneday_byte.softseek.domain.model.ContextBuildResult
 import io.github.we007oneday_byte.softseek.domain.model.Conversation
+import io.github.we007oneday_byte.softseek.domain.model.ImageDetail
+import io.github.we007oneday_byte.softseek.domain.model.MessageAttachment
 import io.github.we007oneday_byte.softseek.domain.model.MessageRole
 import io.github.we007oneday_byte.softseek.domain.model.MessageStatus
 import io.github.we007oneday_byte.softseek.domain.model.TokenUsage
@@ -28,7 +32,9 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.io.IOException
+import java.util.Base64
 import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -43,9 +49,13 @@ class DefaultChatRepository
         private val contextAssembler: ContextAssembler,
         private val apiKeyStore: ApiKeyStore,
     ) : ChatRepository {
-        override fun sendMessage(conversationId: String, text: String): Flow<ChatSendEvent> = flow {
+        override fun sendMessage(
+            conversationId: String,
+            text: String,
+            attachments: List<MessageAttachment>,
+        ): Flow<ChatSendEvent> = flow {
             val content = text.trim()
-            if (content.isEmpty()) {
+            if (content.isEmpty() && attachments.isEmpty()) {
                 emit(ChatSendEvent.Failed(null, ChatError.BadRequest("消息不能为空")))
                 return@flow
             }
@@ -61,6 +71,9 @@ class DefaultChatRepository
             }
             val existing = conversationRepository.getMessages(conversationId)
             val timestamp = nextTimestamp(existing)
+            val imageAttachments = attachments.mapIndexed { index, attachment ->
+                attachment.copy(nodeId = "", sortOrder = index)
+            }
             val userMessage = ChatMessage(
                 id = UUID.randomUUID().toString(),
                 conversationId = conversationId,
@@ -79,15 +92,16 @@ class DefaultChatRepository
                 timestamp = timestamp,
                 isDeleted = false,
                 deletedAt = null,
-                attachments = emptyList(),
+                attachments = imageAttachments.map { it.copy(nodeId = "") },
             )
-            conversationRepository.addMessage(userMessage)
+            conversationRepository.addMessage(userMessage.copy(attachments = imageAttachments))
 
+            val config = memoryPoolRepository.getConfig(conversation.id)
             val assembled = assembleContext(conversation, conversationRepository.getMessages(conversationId))
             val assistant = newAssistant(conversation, parentId = userMessage.id, timestamp = timestamp + 1)
             conversationRepository.addMessage(assistant)
             emit(ChatSendEvent.Started(userMessage, assistant))
-            emitAll(generate(conversation, assistant, apiKey, assembled))
+            emitAll(generate(conversation, assistant, apiKey, assembled, config.imageDetail))
         }.flowOn(Dispatchers.IO)
 
         override fun regenerate(conversationId: String): Flow<ChatSendEvent> = flow {
@@ -113,10 +127,11 @@ class DefaultChatRepository
                 return@flow
             }
             val assembled = assembleContext(conversation, remaining)
+            val config = memoryPoolRepository.getConfig(conversation.id)
             val assistant = newAssistant(conversation, parentId = lastUser.id, timestamp = nextTimestamp(remaining))
             conversationRepository.addMessage(assistant)
             emit(ChatSendEvent.Started(null, assistant))
-            emitAll(generate(conversation, assistant, apiKey, assembled))
+            emitAll(generate(conversation, assistant, apiKey, assembled, config.imageDetail))
         }.flowOn(Dispatchers.IO)
 
         private suspend fun assembleContext(
@@ -162,6 +177,7 @@ class DefaultChatRepository
             assistant: ChatMessage,
             apiKey: String,
             assembled: ContextBuildResult,
+            imageDetail: ImageDetail,
         ): Flow<ChatSendEvent> = flow {
             val content = StringBuilder()
             val reasoning = StringBuilder()
@@ -202,13 +218,25 @@ class DefaultChatRepository
 
             var failure: ChatError? = null
             try {
+                val messages = assembled.messages.map { context ->
+                    AiMessage(
+                        role = context.role,
+                        content = context.content,
+                        images = if (context.role == MessageRole.USER) {
+                            context.images.mapNotNull { encodeImage(it, imageDetail) }
+                        } else {
+                            emptyList()
+                        },
+                    )
+                }
                 provider.streamChat(
                     apiKey = apiKey,
                     request = AiChatRequest(
                         model = conversation.modelName,
-                        messages = assembled.messages.map { AiMessage(it.role, it.content) },
+                        messages = messages,
                         reasoningEffort = conversation.reasoningEffort,
                         maxOutputTokens = conversation.maxOutputTokens,
+                        imageDetail = imageDetail,
                     ),
                 ).collect { event ->
                     if (failure != null) return@collect
@@ -260,6 +288,22 @@ class DefaultChatRepository
             }
         }.flowOn(Dispatchers.IO)
 
+        private suspend fun encodeImage(
+            attachment: MessageAttachment,
+            detail: ImageDetail,
+        ): AiImage? = withContext(Dispatchers.IO) {
+            if (attachment.type != AttachmentType.IMAGE) return@withContext null
+            runCatching {
+                val bytes = File(attachment.localPath).readBytes()
+                require(bytes.size <= MAX_IMAGE_BYTES) { "图片过大" }
+                AiImage(
+                    mime = attachment.mime.ifBlank { "image/jpeg" },
+                    base64 = Base64.getEncoder().encodeToString(bytes),
+                    detail = detail,
+                )
+            }.getOrNull()
+        }
+
         private fun nextTimestamp(messages: List<ChatMessage>): Long {
             val now = System.currentTimeMillis()
             val last = messages.maxOfOrNull { it.timestamp } ?: 0L
@@ -269,5 +313,6 @@ class DefaultChatRepository
         private companion object {
             const val PERSIST_INTERVAL_MS = 250L
             const val PERSIST_CHARS = 200
+            const val MAX_IMAGE_BYTES = 6L * 1024 * 1024
         }
     }

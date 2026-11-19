@@ -24,6 +24,14 @@ interface ConversationRepository {
 
     suspend fun setPinned(poolId: String, pinned: Boolean, now: Long = System.currentTimeMillis())
 
+    suspend fun updateConfig(
+        poolId: String,
+        modelName: String,
+        reasoningEffort: ReasoningEffort,
+        maxOutputTokens: Int,
+        now: Long = System.currentTimeMillis(),
+    )
+
     suspend fun softDeleteConversation(poolId: String, now: Long = System.currentTimeMillis())
 
     suspend fun restoreConversation(poolId: String, now: Long = System.currentTimeMillis())

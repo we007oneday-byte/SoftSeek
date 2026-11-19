@@ -1,8 +1,15 @@
 package io.github.we007oneday_byte.softseek.domain.model
 
+data class AiImage(
+    val mime: String,
+    val base64: String,
+    val detail: ImageDetail = ImageDetail.AUTO,
+)
+
 data class AiMessage(
     val role: MessageRole,
     val content: String,
+    val images: List<AiImage> = emptyList(),
 )
 
 data class AiChatRequest(
@@ -11,6 +18,7 @@ data class AiChatRequest(
     val reasoningEffort: ReasoningEffort,
     val maxOutputTokens: Int,
     val stream: Boolean = true,
+    val imageDetail: ImageDetail = ImageDetail.AUTO,
 )
 
 data class AiModelInfo(

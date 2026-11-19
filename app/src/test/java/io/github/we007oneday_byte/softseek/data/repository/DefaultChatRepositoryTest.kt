@@ -1,6 +1,7 @@
 package io.github.we007oneday_byte.softseek.data.repository
 
 import io.github.we007oneday_byte.softseek.domain.auth.ApiKeyStore
+import io.github.we007oneday_byte.softseek.domain.auth.ApiKeySummary
 import io.github.we007oneday_byte.softseek.domain.context.ContextAssembler
 import io.github.we007oneday_byte.softseek.domain.context.TokenEstimator
 import io.github.we007oneday_byte.softseek.domain.model.AiChatRequest
@@ -130,10 +131,23 @@ class DefaultChatRepositoryTest {
 
 private class FakeApiKeyStore(initial: String?) : ApiKeyStore {
     private val state = MutableStateFlow(initial)
+    private val summaries = MutableStateFlow<List<ApiKeySummary>>(emptyList())
     override val apiKey: StateFlow<String?> = state.asStateFlow()
+    override val keySummaries: StateFlow<List<ApiKeySummary>> = summaries.asStateFlow()
 
     override fun setApiKey(value: String?) {
         state.value = value
+    }
+
+    override fun addKey(label: String, key: String, note: String?): String {
+        state.value = key
+        return "fake"
+    }
+
+    override fun activateKey(id: String) = Unit
+
+    override fun deleteKey(id: String) {
+        state.value = null
     }
 }
 
@@ -220,6 +234,29 @@ private class FakeConversationRepository : ConversationRepository {
     override suspend fun setPinned(poolId: String, pinned: Boolean, now: Long) {
         conversationState.update { list ->
             list.map { if (it.id == poolId) it.copy(isPinned = pinned, updatedAt = now) else it }
+        }
+    }
+
+    override suspend fun updateConfig(
+        poolId: String,
+        modelName: String,
+        reasoningEffort: ReasoningEffort,
+        maxOutputTokens: Int,
+        now: Long,
+    ) {
+        conversationState.update { list ->
+            list.map {
+                if (it.id == poolId) {
+                    it.copy(
+                        modelName = modelName,
+                        reasoningEffort = reasoningEffort,
+                        maxOutputTokens = maxOutputTokens,
+                        updatedAt = now,
+                    )
+                } else {
+                    it
+                }
+            }
         }
     }
 

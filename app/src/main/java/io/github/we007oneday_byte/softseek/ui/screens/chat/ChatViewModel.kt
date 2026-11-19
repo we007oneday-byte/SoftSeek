@@ -1,19 +1,27 @@
 package io.github.we007oneday_byte.softseek.ui.screens.chat
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import io.github.we007oneday_byte.softseek.core.constant.AppConstants
+import io.github.we007oneday_byte.softseek.core.image.ImageProcessor
+import io.github.we007oneday_byte.softseek.data.model.ModelCatalog
+import io.github.we007oneday_byte.softseek.data.settings.SettingsRepository
 import io.github.we007oneday_byte.softseek.domain.auth.ApiKeyStore
+import io.github.we007oneday_byte.softseek.domain.model.AiModelInfo
 import io.github.we007oneday_byte.softseek.domain.model.ChatMessage
 import io.github.we007oneday_byte.softseek.domain.model.ChatSendEvent
 import io.github.we007oneday_byte.softseek.domain.model.Conversation
+import io.github.we007oneday_byte.softseek.domain.model.MemoryPoolConfig
+import io.github.we007oneday_byte.softseek.domain.model.MessageAttachment
 import io.github.we007oneday_byte.softseek.domain.model.MessageRole
 import io.github.we007oneday_byte.softseek.domain.model.ReasoningEffort
 import io.github.we007oneday_byte.softseek.domain.model.userMessage
 import io.github.we007oneday_byte.softseek.domain.repository.ChatRepository
 import io.github.we007oneday_byte.softseek.domain.repository.ConversationRepository
+import io.github.we007oneday_byte.softseek.domain.repository.MemoryPoolRepository
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -39,15 +47,25 @@ data class ChatUiState(
     val streamingReasoning: String = "",
     val errorMessage: String? = null,
     val apiKeyConfigured: Boolean = false,
+    val models: List<AiModelInfo> = emptyList(),
+    val currentModelInfo: AiModelInfo? = null,
+    val pendingImages: List<MessageAttachment> = emptyList(),
+    val isProcessingImages: Boolean = false,
+    val visionEnabled: Boolean = false,
 )
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ChatViewModel
     @Inject
     constructor(
         private val conversationRepository: ConversationRepository,
         private val chatRepository: ChatRepository,
-        apiKeyStore: ApiKeyStore,
+        private val memoryPoolRepository: MemoryPoolRepository,
+        private val settingsRepository: SettingsRepository,
+        private val modelCatalog: ModelCatalog,
+        private val imageProcessor: ImageProcessor,
+        private val apiKeyStore: ApiKeyStore,
     ) : ViewModel() {
         private val activeId = MutableStateFlow<String?>(null)
         private val _uiState = MutableStateFlow(ChatUiState())
@@ -64,6 +82,22 @@ class ChatViewModel
                         state.copy(
                             conversations = conversations,
                             activeConversation = active,
+                            currentModelInfo = active?.let { modelCatalog.model(it.modelName) },
+                            visionEnabled = active?.let { modelCatalog.supportsVision(it.modelName) } ?: false,
+                        )
+                    }
+                }
+                .launchIn(viewModelScope)
+
+            modelCatalog.models
+                .onEach { models ->
+                    _uiState.update { state ->
+                        state.copy(
+                            models = models,
+                            currentModelInfo = state.activeConversation?.let { modelCatalog.model(it.modelName) }
+                                ?: models.firstOrNull(),
+                            visionEnabled = state.activeConversation?.let { modelCatalog.supportsVision(it.modelName) }
+                                ?: (models.firstOrNull()?.inputModalities?.contains("image") == true),
                         )
                     }
                 }
@@ -89,14 +123,97 @@ class ChatViewModel
             _uiState.update { it.copy(errorMessage = null) }
         }
 
+        fun addImages(uris: List<Uri>) {
+            if (uris.isEmpty() || _uiState.value.isProcessingImages) return
+            val existing = _uiState.value.pendingImages.size
+            if (existing >= MAX_IMAGES) return
+            val accepted = uris.take(MAX_IMAGES - existing)
+            viewModelScope.launch {
+                _uiState.update { it.copy(isProcessingImages = true) }
+                runCatching { imageProcessor.prepare(accepted, existing) }
+                    .onSuccess { prepared ->
+                        _uiState.update {
+                            it.copy(
+                                pendingImages = (it.pendingImages + prepared).take(MAX_IMAGES),
+                                isProcessingImages = false,
+                            )
+                        }
+                    }
+                    .onFailure { error ->
+                        _uiState.update {
+                            it.copy(
+                                isProcessingImages = false,
+                                errorMessage = error.message ?: "图片处理失败",
+                            )
+                        }
+                    }
+            }
+        }
+
+        fun removePendingImage(attachmentId: String) {
+            _uiState.update { state ->
+                state.copy(pendingImages = state.pendingImages.filterNot { it.attachmentId == attachmentId })
+            }
+        }
+
+        fun refreshModels() {
+            viewModelScope.launch {
+                val key = apiKeyStore.apiKey.value
+                modelCatalog.refresh(key)
+            }
+        }
+
+        fun updateConversationConfig(
+            modelId: String,
+            effort: ReasoningEffort,
+            maxOutputTokens: Int,
+        ) {
+            val model = modelCatalog.model(modelId)
+            val max = maxOutputTokens.coerceIn(MIN_OUTPUT_TOKENS, model?.maxOutputTokens ?: MAX_OUTPUT_TOKENS)
+            val active = _uiState.value.activeConversation
+            if (active == null) {
+                viewModelScope.launch {
+                    settingsRepository.update {
+                        it.copy(
+                            defaultModel = modelId,
+                            defaultReasoningEffort = effort,
+                            defaultMaxOutputTokens = max,
+                        )
+                    }
+                }
+            } else {
+                viewModelScope.launch {
+                    conversationRepository.updateConfig(active.id, modelId, effort, max)
+                }
+            }
+            _uiState.update {
+                it.copy(
+                    currentModelInfo = model,
+                    visionEnabled = modelCatalog.supportsVision(modelId),
+                    activeConversation = it.activeConversation?.copy(
+                        modelName = modelId,
+                        reasoningEffort = effort,
+                        maxOutputTokens = max,
+                    ),
+                )
+            }
+        }
+
         fun send() {
             val text = _uiState.value.input.trim()
-            if (text.isEmpty() || _uiState.value.isStreaming) return
+            val images = _uiState.value.pendingImages
+            if ((text.isEmpty() && images.isEmpty()) || _uiState.value.isStreaming) return
+            if (images.isNotEmpty() && !_uiState.value.visionEnabled) {
+                _uiState.update { it.copy(errorMessage = "当前模型不支持图片输入，请切换到 deepseek-flash") }
+                return
+            }
             generation += 1
             val runGeneration = generation
+            val attached = images
             _uiState.update {
                 it.copy(
                     input = "",
+                    pendingImages = emptyList(),
                     errorMessage = null,
                     streamingAssistantId = null,
                     streamingContent = "",
@@ -104,9 +221,9 @@ class ChatViewModel
                 )
             }
             sendJob = viewModelScope.launch {
-                val conversationId = activeId.value ?: createConversation(text)
+                val conversationId = activeId.value ?: createConversation(text.ifBlank { "图片对话" })
                 if (conversationId == null || runGeneration != generation) return@launch
-                collectSend(chatRepository.sendMessage(conversationId, text), runGeneration)
+                collectSend(chatRepository.sendMessage(conversationId, text, attached), runGeneration)
             }
         }
 
@@ -229,17 +346,30 @@ class ChatViewModel
         private suspend fun createConversation(firstMessage: String): String? {
             val title = firstMessage.lineSequence().firstOrNull()?.trim()?.take(MAX_TITLE_LENGTH)
             if (title.isNullOrBlank()) return null
+            val settings = settingsRepository.settings.value
             val conversation = conversationRepository.createConversation(
                 title = title,
-                modelName = AppConstants.DEFAULT_MODEL,
-                reasoningEffort = ReasoningEffort.HIGH,
-                maxOutputTokens = DEFAULT_MAX_OUTPUT_TOKENS,
+                modelName = settings.defaultModel,
+                reasoningEffort = settings.defaultReasoningEffort,
+                maxOutputTokens = settings.defaultMaxOutputTokens,
+            )
+            memoryPoolRepository.upsertConfig(
+                MemoryPoolConfig.defaults(conversation.id, System.currentTimeMillis()).copy(
+                    maxInputTokens = settings.defaultMaxInputTokens,
+                    enableAutoCleanup = settings.autoCleanup,
+                    cleanupThresholdCount = settings.cleanupThresholdCount,
+                    cleanupProtectionHours = settings.cleanupProtectionHours,
+                    deletedRetentionDays = settings.deletedRetentionDays,
+                    imageDetail = settings.imageDetail,
+                ),
             )
             activeId.value = conversation.id
             _uiState.update {
                 it.copy(
                     activeConversationId = conversation.id,
                     activeConversation = conversation,
+                    currentModelInfo = modelCatalog.model(conversation.modelName),
+                    visionEnabled = modelCatalog.supportsVision(conversation.modelName),
                 )
             }
             return conversation.id
@@ -336,6 +466,8 @@ class ChatViewModel
 
         private companion object {
             const val MAX_TITLE_LENGTH = 24
-            const val DEFAULT_MAX_OUTPUT_TOKENS = 8192
+            const val MIN_OUTPUT_TOKENS = 256
+            const val MAX_OUTPUT_TOKENS = 393_216
+            const val MAX_IMAGES = 8
         }
     }

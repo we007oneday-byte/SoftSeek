@@ -25,6 +25,18 @@ interface MemoryHeapNodeDao {
     @Query("SELECT COUNT(*) FROM memory_heap_nodes WHERE poolId = :poolId AND isDeleted = 0")
     suspend fun countActive(poolId: String): Int
 
+    @Query("SELECT COALESCE(SUM(totalTokens), 0) FROM memory_heap_nodes WHERE isDeleted = 0")
+    suspend fun sumTotalTokens(): Long
+
+    @Query("SELECT COALESCE(SUM(totalTokens), 0) FROM memory_heap_nodes WHERE isDeleted = 0 AND timestamp >= :since")
+    suspend fun sumTokensSince(since: Long): Long
+
+    @Query(
+        "SELECT COALESCE(SUM(totalTokens), 0) FROM memory_heap_nodes " +
+            "WHERE isDeleted = 0 AND timestamp >= :start AND timestamp < :end",
+    )
+    suspend fun sumTokensBetween(start: Long, end: Long): Long
+
     @Query(
         """
         SELECT * FROM memory_heap_nodes

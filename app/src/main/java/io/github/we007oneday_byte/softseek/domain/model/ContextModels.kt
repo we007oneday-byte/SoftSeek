@@ -5,6 +5,7 @@ data class ContextMessage(
     val content: String,
     val imageCount: Int,
     val tokenEstimate: Int,
+    val images: List<MessageAttachment> = emptyList(),
 )
 
 data class ContextBuildResult(

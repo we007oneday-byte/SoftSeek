@@ -1,6 +1,7 @@
 package io.github.we007oneday_byte.softseek.ui.components.common
 
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -26,6 +27,8 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
+import io.github.we007oneday_byte.softseek.core.settings.CodeTheme
+import io.github.we007oneday_byte.softseek.ui.theme.LocalSoftSeekUiSettings
 import io.github.we007oneday_byte.softseek.ui.theme.softSeekColors
 
 private sealed interface MarkdownBlock {
@@ -88,9 +91,17 @@ fun MarkdownText(
 
 @Composable
 private fun CodeBlock(block: MarkdownBlock.Code) {
+    val uiSettings = LocalSoftSeekUiSettings.current
+    val darkCode = when (uiSettings.codeTheme) {
+        CodeTheme.FOLLOW_THEME -> isSystemInDarkTheme()
+        CodeTheme.LIGHT -> false
+        CodeTheme.DARK -> true
+    }
+    val background = if (darkCode) Color(0xFF1B1F24) else Color(0xFFF4F6F8)
+    val foreground = if (darkCode) Color(0xFFE6EDF3) else Color(0xFF24292F)
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.softSeekColors.codeBackground,
+        color = background,
         shape = RoundedCornerShape(10.dp),
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
@@ -98,7 +109,7 @@ private fun CodeBlock(block: MarkdownBlock.Code) {
                 Text(
                     text = it,
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.softSeekColors.textSecondary,
+                    color = if (darkCode) Color(0xFF8B949E) else Color(0xFF6E7781),
                 )
                 Spacer(Modifier.height(6.dp))
             }
@@ -107,7 +118,7 @@ private fun CodeBlock(block: MarkdownBlock.Code) {
                     text = block.code,
                     modifier = Modifier.horizontalScroll(rememberScrollState()),
                     style = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
-                    color = MaterialTheme.softSeekColors.textPrimary,
+                    color = foreground,
                     softWrap = false,
                 )
             }

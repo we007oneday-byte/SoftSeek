@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import io.github.we007oneday_byte.softseek.data.local.entity.MemoryPoolBlockEntity
+import io.github.we007oneday_byte.softseek.domain.model.ReasoningEffort
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -38,6 +39,22 @@ interface MemoryPoolBlockDao {
 
     @Query("UPDATE memory_pool_blocks SET isPinned = :isPinned, updatedAt = :updatedAt WHERE poolId = :poolId")
     suspend fun setPinned(poolId: String, isPinned: Boolean, updatedAt: Long): Int
+
+    @Query(
+        """
+        UPDATE memory_pool_blocks
+        SET modelName = :modelName, reasoningEffort = :reasoningEffort,
+            maxOutputTokens = :maxOutputTokens, updatedAt = :updatedAt
+        WHERE poolId = :poolId
+        """,
+    )
+    suspend fun updateConfig(
+        poolId: String,
+        modelName: String,
+        reasoningEffort: ReasoningEffort,
+        maxOutputTokens: Int,
+        updatedAt: Long,
+    ): Int
 
     @Query(
         """

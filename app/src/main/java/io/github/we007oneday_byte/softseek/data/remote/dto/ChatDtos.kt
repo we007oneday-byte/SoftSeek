@@ -2,6 +2,8 @@ package io.github.we007oneday_byte.softseek.data.remote.dto
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 
 @Serializable
 data class ChatCompletionRequestDto(
@@ -16,8 +18,10 @@ data class ChatCompletionRequestDto(
 @Serializable
 data class ChatMessageDto(
     val role: String,
-    val content: String,
-)
+    val content: JsonElement,
+) {
+    constructor(role: String, content: String) : this(role, JsonPrimitive(content))
+}
 
 @Serializable
 data class StreamOptionsDto(
@@ -72,4 +76,17 @@ data class CompletionChoiceDto(
     val index: Int = 0,
     val message: ChatMessageDto? = null,
     @SerialName("finish_reason") val finishReason: String? = null,
+)
+
+@Serializable
+data class ChatContentPartDto(
+    val type: String,
+    val text: String? = null,
+    @SerialName("image_url") val imageUrl: ChatImageUrlDto? = null,
+)
+
+@Serializable
+data class ChatImageUrlDto(
+    val url: String,
+    val detail: String? = null,
 )

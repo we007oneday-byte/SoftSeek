@@ -7,9 +7,11 @@ import dagger.hilt.components.SingletonComponent
 import io.github.we007oneday_byte.softseek.data.repository.DefaultChatRepository
 import io.github.we007oneday_byte.softseek.data.repository.RoomConversationRepository
 import io.github.we007oneday_byte.softseek.data.repository.RoomMemoryPoolRepository
+import io.github.we007oneday_byte.softseek.data.repository.RoomUsageRepository
 import io.github.we007oneday_byte.softseek.domain.repository.ChatRepository
 import io.github.we007oneday_byte.softseek.domain.repository.ConversationRepository
 import io.github.we007oneday_byte.softseek.domain.repository.MemoryPoolRepository
+import io.github.we007oneday_byte.softseek.domain.repository.UsageRepository
 import javax.inject.Singleton
 
 @Module
@@ -26,4 +28,8 @@ abstract class RepositoryModule {
     @Binds
     @Singleton
     abstract fun bindChatRepository(impl: DefaultChatRepository): ChatRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindUsageRepository(impl: RoomUsageRepository): UsageRepository
 }

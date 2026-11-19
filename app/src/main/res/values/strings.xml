@@ -18,7 +18,7 @@
     <string name="settings_api">API 配置</string>
     <string name="settings_api_key">API 密钥管理</string>
     <string name="settings_base_url">Base URL</string>
-    <string name="settings_guide">使用引导</string>
+    <string name="settings_balance">账户余额</string>
     <string name="settings_model">模型参数</string>
     <string name="settings_chat">聊天设置</string>
     <string name="settings_call">通话设置</string>
@@ -38,9 +38,7 @@
     <string name="settings_api_key_not_set">尚未配置</string>
     <string name="settings_current_model">当前模型</string>
     <string name="settings_thinking_effort">思考强度</string>
-    <string name="settings_thinking_effort_value">high（默认）</string>
     <string name="settings_max_output">最大输出</string>
-    <string name="settings_max_output_value">8K / 64K / 128K</string>
     <string name="settings_streaming">流式输出</string>
     <string name="settings_streaming_on">开启</string>
     <string name="settings_markdown">Markdown 渲染</string>
@@ -51,25 +49,17 @@
     <string name="settings_auto_cleanup">自动清理</string>
     <string name="settings_auto_cleanup_value">默认关闭，按需开启</string>
     <string name="settings_recycle_bin">回收站</string>
-    <string name="settings_recycle_bin_value">7 天</string>
     <string name="settings_theme">主题</string>
     <string name="settings_theme_system">跟随系统</string>
-    <string name="settings_theme_light">浅色</string>
-    <string name="settings_theme_dark">深色</string>
     <string name="settings_dynamic_color">动态取色</string>
-    <string name="settings_dynamic_color_off">关闭</string>
     <string name="settings_export_import">导出 / 导入</string>
     <string name="settings_local_storage">本地存储</string>
     <string name="settings_local_storage_value">仅本机，不上传</string>
     <string name="settings_version">版本</string>
     <string name="settings_app_nature">应用性质</string>
-    <string name="settings_api_key_set">已配置（仅本次运行）</string>
-    <string name="settings_api_key_dialog_title">配置 DeepSeek API Key</string>
     <string name="settings_api_key_dialog_hint">sk-…</string>
-    <string name="settings_api_key_dialog_note">当前版本仅保存在内存，重启应用后需要重新输入。阶段 4 将接入 Android Keystore 加密持久化。</string>
     <string name="settings_api_key_save">保存</string>
-    <string name="settings_api_key_clear">清除</string>
-    <string name="settings_api_key_cancel">取消</string>
+
     <string name="chat_stop">停止生成</string>
     <string name="chat_regenerate">重新生成</string>
     <string name="chat_retry">重试</string>
@@ -95,6 +85,10 @@
     <string name="chat_pin">置顶</string>
     <string name="chat_unpin">取消置顶</string>
     <string name="chat_export">导出当前会话</string>
+    <string name="chat_model_settings">模型与参数</string>
+    <string name="chat_model_title">选择模型与思考档位</string>
+    <string name="chat_image">图片</string>
+    <string name="chat_remove_image">移除图片</string>
     <string name="chat_export_empty">当前会话没有可导出的消息</string>
     <string name="chat_edit_message_title">编辑消息</string>
     <string name="chat_edit_message_note">保存后会删除该消息之后的内容并重新生成回复。</string>

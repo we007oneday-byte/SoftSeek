@@ -5,7 +5,11 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.widget.Toast
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
@@ -26,6 +30,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -52,6 +57,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -76,24 +82,36 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
 import io.github.we007oneday_byte.softseek.R
+import io.github.we007oneday_byte.softseek.domain.model.AiModelInfo
+import io.github.we007oneday_byte.softseek.domain.model.AttachmentType
 import io.github.we007oneday_byte.softseek.domain.model.ChatMessage
 import io.github.we007oneday_byte.softseek.domain.model.Conversation
+import io.github.we007oneday_byte.softseek.domain.model.MessageAttachment
 import io.github.we007oneday_byte.softseek.domain.model.MessageRole
 import io.github.we007oneday_byte.softseek.domain.model.MessageStatus
+import io.github.we007oneday_byte.softseek.domain.model.ReasoningEffort
 import io.github.we007oneday_byte.softseek.ui.components.common.MarkdownText
 import io.github.we007oneday_byte.softseek.ui.components.common.SettingItem
+import io.github.we007oneday_byte.softseek.ui.theme.LocalSoftSeekUiSettings
 import io.github.we007oneday_byte.softseek.ui.theme.softSeekColors
 import kotlinx.coroutines.launch
+import java.io.File
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -110,6 +128,14 @@ fun ChatScreen(
     var deleteTarget by remember { mutableStateOf<Conversation?>(null) }
     var editTarget by remember { mutableStateOf<ChatMessage?>(null) }
     var showTopMenu by remember { mutableStateOf(false) }
+    var showModelDialog by remember { mutableStateOf(false) }
+    var previewImage by remember { mutableStateOf<String?>(null) }
+    val imagePicker = rememberLauncherForActivityResult(
+        ActivityResultContracts.PickMultipleVisualMedia(MAX_IMAGES),
+    ) { uris -> viewModel.addImages(uris) }
+    fun pickImages() {
+        imagePicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+    }
 
     fun shareText(text: String) {
         if (text.isBlank()) {
@@ -191,6 +217,13 @@ fun ChatScreen(
                                 onDismissRequest = { showTopMenu = false },
                             ) {
                                 DropdownMenuItem(
+                                    text = { Text(stringResource(R.string.chat_model_settings)) },
+                                    onClick = {
+                                        showTopMenu = false
+                                        showModelDialog = true
+                                    },
+                                )
+                                DropdownMenuItem(
                                     text = { Text(stringResource(R.string.chat_export)) },
                                     onClick = {
                                         showTopMenu = false
@@ -218,6 +251,11 @@ fun ChatScreen(
                     onValueChange = viewModel::onInputChange,
                     isStreaming = state.isStreaming,
                     apiKeyConfigured = state.apiKeyConfigured,
+                    pendingImages = state.pendingImages,
+                    isProcessingImages = state.isProcessingImages,
+                    visionEnabled = state.visionEnabled,
+                    onPickImages = ::pickImages,
+                    onRemoveImage = viewModel::removePendingImage,
                     onSend = viewModel::send,
                     onStop = viewModel::stop,
                     onOpenSettings = onOpenSettings,
@@ -252,6 +290,7 @@ fun ChatScreen(
                         onEdit = { editTarget = it },
                         onDelete = viewModel::deleteMessage,
                         onRegenerate = viewModel::regenerate,
+                        onPreviewImage = { previewImage = it },
                     )
                 }
             }
@@ -299,6 +338,23 @@ fun ChatScreen(
                 editTarget = null
             },
         )
+    }
+    if (showModelDialog) {
+        ModelSettingsDialog(
+            models = state.models,
+            currentModel = state.currentModelInfo,
+            currentEffort = state.activeConversation?.reasoningEffort ?: ReasoningEffort.HIGH,
+            currentMaxTokens = state.activeConversation?.maxOutputTokens ?: 8192,
+            onRefresh = viewModel::refreshModels,
+            onDismiss = { showModelDialog = false },
+            onApply = { model, effort, maxTokens ->
+                viewModel.updateConversationConfig(model.id, effort, maxTokens)
+                showModelDialog = false
+            },
+        )
+    }
+    previewImage?.let { path ->
+        FullScreenImageDialog(path = path, onDismiss = { previewImage = null })
     }
 }
 
@@ -484,6 +540,7 @@ private fun MessageList(
     onEdit: (ChatMessage) -> Unit,
     onDelete: (String) -> Unit,
     onRegenerate: () -> Unit,
+    onPreviewImage: (String) -> Unit,
 ) {
     val visible = messages.filter { !it.isDeleted && it.role != MessageRole.SYSTEM }
     val lastAssistantId = visible.lastOrNull { it.role == MessageRole.ASSISTANT }?.id
@@ -521,6 +578,7 @@ private fun MessageList(
                 onDelete = { onDelete(message.id) },
                 onRegenerate = onRegenerate,
                 onRetry = onRegenerate,
+                onPreviewImage = onPreviewImage,
             )
         }
     }
@@ -540,11 +598,14 @@ private fun MessageBubble(
     onDelete: () -> Unit,
     onRegenerate: () -> Unit,
     onRetry: () -> Unit,
+    onPreviewImage: (String) -> Unit,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     val isUser = message.role == MessageRole.USER
     val content = streamingContent.ifBlank { message.content }
     val reasoning = streamingReasoning.ifBlank { message.reasoningContent.orEmpty() }
+    val imageAttachments = message.attachments.filter { it.type == AttachmentType.IMAGE }
+    val bubbleRadius = LocalSoftSeekUiSettings.current.bubbleRadiusDp.dp
     val finishWarning = if (isUser || isStreaming) {
         null
     } else {
@@ -573,12 +634,28 @@ private fun MessageBubble(
                     MaterialTheme.softSeekColors.aiBubble
                 },
                 shape = if (isUser) {
-                    RoundedCornerShape(16.dp, 16.dp, 4.dp, 16.dp)
+                    RoundedCornerShape(bubbleRadius, bubbleRadius, 4.dp, bubbleRadius)
                 } else {
-                    RoundedCornerShape(16.dp, 16.dp, 16.dp, 4.dp)
+                    RoundedCornerShape(bubbleRadius, bubbleRadius, bubbleRadius, 4.dp)
                 },
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
+                    if (imageAttachments.isNotEmpty()) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            items(imageAttachments, key = { it.attachmentId }) { attachment ->
+                                AsyncImage(
+                                    model = File(attachment.localPath),
+                                    contentDescription = stringResource(R.string.chat_image),
+                                    modifier = Modifier
+                                        .size(132.dp)
+                                        .clip(RoundedCornerShape(10.dp))
+                                        .clickable { onPreviewImage(attachment.localPath) },
+                                    contentScale = ContentScale.Crop,
+                                )
+                            }
+                        }
+                        if (content.isNotBlank()) Spacer(Modifier.height(8.dp))
+                    }
                     if (!isUser) {
                         Text(
                             text = "SOFTSEEK",
@@ -761,6 +838,11 @@ private fun ChatInputBar(
     onValueChange: (String) -> Unit,
     isStreaming: Boolean,
     apiKeyConfigured: Boolean,
+    pendingImages: List<MessageAttachment>,
+    isProcessingImages: Boolean,
+    visionEnabled: Boolean,
+    onPickImages: () -> Unit,
+    onRemoveImage: (String) -> Unit,
     onSend: () -> Unit,
     onStop: () -> Unit,
     onOpenSettings: () -> Unit,
@@ -794,11 +876,52 @@ private fun ChatInputBar(
                     )
                 }
             }
+            if (pendingImages.isNotEmpty() || isProcessingImages) {
+                LazyRow(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    items(pendingImages, key = { it.attachmentId }) { attachment ->
+                        Box {
+                            AsyncImage(
+                                model = File(attachment.localPath),
+                                contentDescription = stringResource(R.string.chat_image),
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(RoundedCornerShape(8.dp)),
+                                contentScale = ContentScale.Crop,
+                            )
+                            IconButton(
+                                onClick = { onRemoveImage(attachment.attachmentId) },
+                                modifier = Modifier
+                                    .align(Alignment.TopEnd)
+                                    .size(24.dp),
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Close,
+                                    contentDescription = stringResource(R.string.chat_remove_image),
+                                    modifier = Modifier.size(16.dp),
+                                )
+                            }
+                        }
+                    }
+                    if (isProcessingImages) {
+                        item {
+                            Box(
+                                modifier = Modifier.size(64.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                            }
+                        }
+                    }
+                }
+            }
             Row(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalAlignment = Alignment.Bottom,
             ) {
-                IconButton(onClick = {}, enabled = false) {
+                IconButton(onClick = onPickImages, enabled = visionEnabled && !isStreaming) {
                     Icon(
                         imageVector = Icons.Outlined.Add,
                         contentDescription = stringResource(R.string.attach),
@@ -829,7 +952,7 @@ private fun ChatInputBar(
                 } else {
                     FilledIconButton(
                         onClick = onSend,
-                        enabled = value.isNotBlank(),
+                        enabled = value.isNotBlank() || pendingImages.isNotEmpty(),
                     ) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Outlined.Send,
@@ -985,6 +1108,148 @@ private fun EditMessageDialog(
         },
     )
 }
+
+@Composable
+private fun ModelSettingsDialog(
+    models: List<AiModelInfo>,
+    currentModel: AiModelInfo?,
+    currentEffort: ReasoningEffort,
+    currentMaxTokens: Int,
+    onRefresh: () -> Unit,
+    onDismiss: () -> Unit,
+    onApply: (AiModelInfo, ReasoningEffort, Int) -> Unit,
+) {
+    val available = models.ifEmpty { listOfNotNull(currentModel) }
+    if (available.isEmpty()) return
+    var selected by remember(currentModel?.id) {
+        mutableStateOf(available.firstOrNull { it.id == currentModel?.id } ?: available.first())
+    }
+    var effort by remember(currentEffort) { mutableStateOf(currentEffort) }
+    var maxTokens by remember(currentMaxTokens) { mutableStateOf(currentMaxTokens.toString()) }
+    LaunchedEffect(Unit) { onRefresh() }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.chat_model_title)) },
+        text = {
+            Column(modifier = Modifier.heightIn(max = 430.dp)) {
+                available.forEach { model ->
+                    FilterChip(
+                        selected = model.id == selected.id,
+                        onClick = { selected = model },
+                        label = {
+                            Text(
+                                "${model.displayName} · ${if (model.inputModalities.contains(
+                                        "image",
+                                    )
+                                ) {
+                                    "图片+文本"
+                                } else {
+                                    "纯文本"
+                                }}",
+                            )
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 2.dp),
+                    )
+                }
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.settings_thinking_effort),
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ReasoningEffort.entries.forEach { level ->
+                        val supported = selected.reasoningLevels.isEmpty() ||
+                            level == ReasoningEffort.NONE ||
+                            selected.reasoningLevels.contains(level)
+                        if (supported) {
+                            FilterChip(
+                                selected = effort == level,
+                                onClick = { effort = level },
+                                label = { Text(effortLabel(level)) },
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = maxTokens,
+                    onValueChange = { maxTokens = it.filter(Char::isDigit).take(6) },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.settings_max_output)) },
+                    supportingText = {
+                        Text("$MIN_OUTPUT_TOKENS - ${selected.maxOutputTokens.takeIf { it > 0 } ?: 393216}")
+                    },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    val tokens = maxTokens.toIntOrNull() ?: currentMaxTokens
+                    val upper = selected.maxOutputTokens.takeIf { it > 0 } ?: 393216
+                    onApply(selected, effort, tokens.coerceIn(MIN_OUTPUT_TOKENS, upper))
+                },
+            ) {
+                Text(stringResource(R.string.chat_confirm))
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.chat_cancel)) }
+        },
+    )
+}
+
+private fun effortLabel(value: ReasoningEffort): String = when (value) {
+    ReasoningEffort.NONE -> "关闭思考"
+    ReasoningEffort.LOW -> "低"
+    ReasoningEffort.HIGH -> "高"
+    ReasoningEffort.MAX -> "最大"
+}
+
+@Composable
+private fun FullScreenImageDialog(
+    path: String,
+    onDismiss: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .clickable(onClick = onDismiss),
+            contentAlignment = Alignment.Center,
+        ) {
+            AsyncImage(
+                model = File(path),
+                contentDescription = stringResource(R.string.chat_image),
+                modifier = Modifier.fillMaxWidth(),
+                contentScale = ContentScale.Fit,
+            )
+            IconButton(
+                onClick = onDismiss,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp),
+            ) {
+                Icon(
+                    imageVector = Icons.Outlined.Close,
+                    contentDescription = stringResource(R.string.chat_cancel),
+                    tint = Color.White,
+                )
+            }
+        }
+    }
+}
+
+private const val MAX_IMAGES = 8
+private const val MIN_OUTPUT_TOKENS = 256
 
 private fun copyText(context: Context, text: String) {
     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager

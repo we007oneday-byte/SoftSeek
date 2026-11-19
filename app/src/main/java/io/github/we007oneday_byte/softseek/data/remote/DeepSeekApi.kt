@@ -11,29 +11,34 @@ import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.Streaming
+import retrofit2.http.Url
 
 interface DeepSeekApi {
-    @POST("chat/completions")
+    @POST
     suspend fun chat(
+        @Url url: String,
         @Header("Authorization") authorization: String,
         @Body request: ChatCompletionRequestDto,
     ): Response<ChatCompletionResponseDto>
 
-    @GET("models")
+    @GET
     suspend fun listModels(
+        @Url url: String,
         @Header("Authorization") authorization: String,
     ): Response<ModelsResponseDto>
 
-    @GET("user/balance")
+    @GET
     suspend fun balance(
+        @Url url: String,
         @Header("Authorization") authorization: String,
     ): Response<BalanceResponseDto>
 }
 
 interface DeepSeekStreamApi {
     @Streaming
-    @POST("chat/completions")
+    @POST
     suspend fun streamChat(
+        @Url url: String,
         @Header("Authorization") authorization: String,
         @Body request: ChatCompletionRequestDto,
     ): Response<ResponseBody>

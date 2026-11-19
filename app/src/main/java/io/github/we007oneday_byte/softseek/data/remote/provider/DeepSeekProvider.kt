@@ -1,13 +1,14 @@
 package io.github.we007oneday_byte.softseek.data.remote.provider
 
-import io.github.we007oneday_byte.softseek.data.remote.DeepSeekApi
-import io.github.we007oneday_byte.softseek.data.remote.DeepSeekStreamApi
+import io.github.we007oneday_byte.softseek.core.network.DynamicApiFactory
 import io.github.we007oneday_byte.softseek.data.remote.dto.ApiErrorEnvelopeDto
 import io.github.we007oneday_byte.softseek.data.remote.dto.ChatCompletionRequestDto
 import io.github.we007oneday_byte.softseek.data.remote.dto.ChatMessageDto
 import io.github.we007oneday_byte.softseek.data.remote.dto.StreamOptionsDto
 import io.github.we007oneday_byte.softseek.data.remote.sse.SseParser
+import io.github.we007oneday_byte.softseek.data.settings.SettingsRepository
 import io.github.we007oneday_byte.softseek.domain.model.AiChatRequest
+import io.github.we007oneday_byte.softseek.domain.model.AiMessage
 import io.github.we007oneday_byte.softseek.domain.model.AiModelInfo
 import io.github.we007oneday_byte.softseek.domain.model.BalanceEntry
 import io.github.we007oneday_byte.softseek.domain.model.BalanceInfo
@@ -23,6 +24,11 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOn
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -31,10 +37,10 @@ import javax.inject.Singleton
 class DeepSeekProvider
     @Inject
     constructor(
-        private val api: DeepSeekApi,
-        private val streamApi: DeepSeekStreamApi,
+        private val apiFactory: DynamicApiFactory,
         private val sseParser: SseParser,
         private val json: Json,
+        private val settingsRepository: SettingsRepository,
     ) : AiProvider {
         override val id: String = PROVIDER_ID
 
@@ -54,7 +60,11 @@ class DeepSeekProvider
                 return@flow
             }
             val response = try {
-                streamApi.streamChat("Bearer $apiKey", request.toDto())
+                apiFactory.streamApi().streamChat(
+                    endpoint("chat/completions"),
+                    "Bearer $apiKey",
+                    request.toDto(),
+                )
             } catch (error: IOException) {
                 emit(ChatStreamEvent.Failed(ChatError.Network(error.message.orEmpty())))
                 return@flow
@@ -77,7 +87,7 @@ class DeepSeekProvider
 
         override suspend fun listModels(apiKey: String): List<AiModelInfo> {
             if (apiKey.isBlank()) throw AiProviderException(ChatError.NoApiKey)
-            val response = api.listModels("Bearer $apiKey")
+            val response = apiFactory.api().listModels(endpoint("models"), "Bearer $apiKey")
             if (!response.isSuccessful) {
                 throw AiProviderException(
                     mapHttpError(response.code(), response.errorBody()?.string()),
@@ -99,7 +109,7 @@ class DeepSeekProvider
 
         override suspend fun getBalance(apiKey: String): BalanceInfo? {
             if (apiKey.isBlank()) throw AiProviderException(ChatError.NoApiKey)
-            val response = api.balance("Bearer $apiKey")
+            val response = apiFactory.api().balance(endpoint("user/balance"), "Bearer $apiKey")
             if (!response.isSuccessful) {
                 throw AiProviderException(
                     mapHttpError(response.code(), response.errorBody()?.string()),
@@ -121,12 +131,44 @@ class DeepSeekProvider
 
         private fun AiChatRequest.toDto(): ChatCompletionRequestDto = ChatCompletionRequestDto(
             model = model,
-            messages = messages.map { ChatMessageDto(role = it.role.name.lowercase(), content = it.content) },
+            messages = messages.map { message -> message.toDto() },
             reasoningEffort = reasoningEffort.name.lowercase(),
             maxTokens = maxOutputTokens,
             stream = stream,
             streamOptions = if (stream) StreamOptionsDto(includeUsage = true) else null,
         )
+
+        private fun AiMessage.toDto(): ChatMessageDto {
+            val text = content.ifBlank { if (images.isNotEmpty()) "请查看图片" else "" }
+            val payload = if (images.isEmpty()) {
+                JsonPrimitive(text)
+            } else {
+                buildJsonArray {
+                    addJsonObject {
+                        put("type", "text")
+                        put("text", text)
+                    }
+                    images.take(MAX_IMAGES_PER_MESSAGE).forEach { image ->
+                        addJsonObject {
+                            put("type", "image_url")
+                            put(
+                                "image_url",
+                                buildJsonObject {
+                                    put("url", "data:${image.mime};base64,${image.base64}")
+                                    put("detail", image.detail.name.lowercase())
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+            return ChatMessageDto(role = role.name.lowercase(), content = payload)
+        }
+
+        private fun endpoint(path: String): String {
+            val base = settingsRepository.settings.value.baseUrl.trim().trimEnd('/')
+            return "$base/$path"
+        }
 
         private fun mapHttpError(statusCode: Int, rawBody: String?): ChatError {
             val providerMessage = rawBody?.let { body ->
@@ -151,5 +193,6 @@ class DeepSeekProvider
 
         private companion object {
             const val PROVIDER_ID = "deepseek"
+            const val MAX_IMAGES_PER_MESSAGE = 8
         }
     }

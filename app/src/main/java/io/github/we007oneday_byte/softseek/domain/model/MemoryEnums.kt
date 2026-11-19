@@ -1,5 +1,7 @@
 package io.github.we007oneday_byte.softseek.domain.model
 
+import kotlinx.serialization.Serializable
+
 enum class MessageRole {
     SYSTEM,
     USER,
@@ -18,6 +20,7 @@ enum class AttachmentType {
     FILE,
 }
 
+@Serializable
 enum class ReasoningEffort {
     NONE,
     LOW,
@@ -25,6 +28,7 @@ enum class ReasoningEffort {
     MAX,
 }
 
+@Serializable
 enum class ImageDetail {
     AUTO,
     LOW,

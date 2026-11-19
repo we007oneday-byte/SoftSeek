@@ -4,7 +4,7 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import io.github.we007oneday_byte.softseek.core.auth.InMemoryApiKeyStore
+import io.github.we007oneday_byte.softseek.core.auth.KeystoreApiKeyStore
 import io.github.we007oneday_byte.softseek.domain.auth.ApiKeyStore
 import javax.inject.Singleton
 
@@ -13,5 +13,5 @@ import javax.inject.Singleton
 abstract class AuthModule {
     @Binds
     @Singleton
-    abstract fun bindApiKeyStore(store: InMemoryApiKeyStore): ApiKeyStore
+    abstract fun bindApiKeyStore(store: KeystoreApiKeyStore): ApiKeyStore
 }

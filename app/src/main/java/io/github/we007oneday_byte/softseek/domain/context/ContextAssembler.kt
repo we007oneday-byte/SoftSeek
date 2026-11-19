@@ -40,7 +40,8 @@ class ContextAssembler
 
             val selected = mutableListOf<ContextMessage>()
             for (message in candidates.asReversed()) {
-                val imageCount = message.attachments.count { it.type == AttachmentType.IMAGE }
+                val imageAttachments = message.attachments.filter { it.type == AttachmentType.IMAGE }
+                val imageCount = imageAttachments.size
                 val imageTokens = tokenEstimator.estimateImages(imageCount)
                 val remaining = budget - usedTokens
                 if (remaining <= imageTokens) {
@@ -69,6 +70,7 @@ class ContextAssembler
                         content = fittedContent,
                         imageCount = imageCount,
                         tokenEstimate = totalTokens,
+                        images = imageAttachments,
                     ),
                 )
                 usedTokens += totalTokens
