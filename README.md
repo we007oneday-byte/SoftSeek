@@ -15,10 +15,12 @@ P5 已完成：
 - `VoskModelSpec` 固化 small-cn 42MB 模型 URL、大小 `43,898,754`、SHA-256 `3af8b0e7…5b14ba` 与必需文件清单
 - 模型管理：Range 断点续传、大小/SHA-256 校验、zip slip/条目数量/解压体积防护、staging 解压后原子替换；失败保留 `.part`
 - 设置页“离线识别模型”支持下载进度、取消、失败重试；模型安装在 `filesDir/models/vosk-model-small-cn-0.22`
+- Vosk 流式识别：`Recognizer.acceptWaveForm` 端点检测、partial 去重、final 输出、句尾 reset、错误事件
+- AudioRecord：16kHz/16bit/mono，优先 `VOICE_COMMUNICATION`，回退 `MIC`，可用时显式启用 `AcousticEchoCanceler`
 - 系统 TTS 封装：中文语言检测、语速/音调、stop/release、逐句回调；设置页提供试听入口
-- 新增 6 项模型管理单测；当前 46 项单测、Lint 0 issue、debug APK 可构建
+- 新增 10 项模型/结果解析单测；当前 50 项单测、Lint 0 issue、debug APK 可构建
 
-P5 尚未接入：Vosk 流式识别、AudioRecord/AEC、通话状态机、通话页 UI、前台服务与接近传感器。
+P5 尚未接入：通话状态机、分句与打断、音频模式/焦点、前台服务、接近传感器、通话页 UI、真机测试。
 
 **阶段 4：多模态、模型与设置（P4，已完成）**
 
@@ -95,7 +97,8 @@ app/src/main/java/io/github/we007oneday_byte/softseek/
 ├── ChatApp.kt
 ├── MainActivity.kt
 ├── core/
-│   ├── asr/                # Vosk 模型规格/下载/校验/解压 + AsrEngine
+│   ├── asr/                # Vosk 模型规格/下载/校验/解压 + 流式识别
+│   ├── audio/              # AudioRecord + AEC
 │   ├── auth/               # Keystore AES/GCM 多 Key
 │   ├── constant/AppConstants.kt
 │   ├── image/              # ImageProcessor（压缩/缓存）
