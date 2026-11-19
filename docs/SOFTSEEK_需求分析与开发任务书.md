@@ -4,11 +4,11 @@
 |---|---|
 | 评审对象 | 《DeepSeek 第三方安卓客户端 完整AI开发执行文档 V1.0》 |
 | 项目代号 | SOFTSEEK / SK |
-| 文档版本 | V1.2（决策补全） |
+| 文档版本 | V1.3（发布与升级计划补全） |
 | 编制日期 | 2026-11-19 |
-| 变更记录 | V1.1：D1 保留 SOFTSEEK（接受相似度风险）；D2 首版 Vosk small-cn 42MB + 系统 TTS；D3 自动清理默认关闭 + 手动触发。V1.2：D7 包名按 GitHub owner 定为 `io.github.we007oneday_byte.softseek` |
+| 变更记录 | V1.1：D1 保留 SOFTSEEK（接受相似度风险）；D2 首版 Vosk small-cn 42MB + 系统 TTS；D3 自动清理默认关闭 + 手动触发。V1.2：D7 包名按 GitHub owner 定为 `io.github.we007oneday_byte.softseek`。V1.3：新增 §5.9 版本升级与软件发布计划（应用内 24h 更新检查、GitHub→Gitee 双源、Vite/GitHub Pages 官网、地理路由下载、Release 命名规范） |
 | 技术基线核对时间 | 2026-11-19（DeepSeek API、Android 17 SDK、Vosk、sherpa-onnx） |
-| 评审结论 | **有条件通过；6 个硬缺口已给出修正方案；D1/D2/D3 已确认，可进入阶段 0** |
+| 评审结论 | **有条件通过；6 个硬缺口已给出修正方案；D1/D2/D3 已确认；V1.3 已补全升级与发布计划，可进入阶段 0** |
 | 适用读者 | 开发执行人、代码评审人、项目负责人 |
 
 > 本文不是对原需求文档的复述，而是把原文档转成“能开工、能验收、能排期”的工程基线。原文档中的功能设计整体成立，问题集中在**接口契约、依赖坐标、数据模型一致性、系统权限与工具链**五类，均已给出可直接执行的修正方案。
@@ -34,8 +34,8 @@
 
 ### 0.3 工作量与关键路径
 
-- 总工作量：**约 81 人日**（含 P5-06 可选 TTS；若首版不做则 79.5 人日），含 20% 缓冲约 **97 人日**；按每周 5 天计约 **17～19 周**。
-- 关键路径：`P0 工具链 → P1 工程骨架 → P2 数据/记忆池 → P3 API/聊天 → P5 通话 → P6 迁移/适配 → P7 发布`。
+- 总工作量：**约 89.5 人日**（含 P5-06 可选 TTS 与 P7 发布增量 8.5 人日；若首版不做 P5-06 则 88.0 人日），含 20% 缓冲约 **107.4 人日**；按每周 5 天计约 **21～22 周**。
+- 关键路径：`P0 工具链 → P1 工程骨架 → P2 数据/记忆池 → P3 API/聊天 → P5 通话 → P6 迁移/适配 → P7 发布（含 24h 升级检查、双源同步、官网）`。
 - 可并行项：P4 设置/多模态可在 P3 后半段并行；P6 的 16KB/edge-to-edge 验证可提前到 P2 之后。
 - 最大不确定性：P5 通话（回声消除、打断、贴脸熄屏）与 P6 的 Vosk 16KB 兼容，建议各留 2 天技术验证。
 
@@ -110,6 +110,10 @@
 | 系统适配 | Android 11～17 | P0 | 16KB、edge-to-edge 重点 |
 | 系统适配 | 权限动态申请 | P0 | 通知/录音 |
 | 系统适配 | 前台服务保活 | P0 | 通话专用 |
+| 发布/升级 | 应用内 24h 升级检查与提醒 | P0 | WorkManager + 双源静态清单；见 §5.9 |
+| 发布/升级 | GitHub→Gitee 双源 Release/资产同步 | P0 | GitHub Actions；见 §5.9.5 |
+| 发布/分发 | GitHub Pages + Vite 官网 | P0 | 介绍/功能/API/指南/下载；见 §5.9.6 |
+| 发布/分发 | 按国家码切换 GitHub/Gitee 下载源 | P0 | 失败默认 GitHub，可手动切换 |
 
 ### 1.3 用户关键路径
 
@@ -317,6 +321,9 @@ Provider 实现只负责“请求构造 + 响应映射 + 错误码翻译”，UI
 | R13 | 导入官方格式未知 | 中 | 迁移功能延期 | 中 | 无样本 | 先要样本；adapter 化 | P6 |
 | R14 | 本机无 SDK/Studio/Git，JDK 25 | 已发生 | 无法编译 | 高 | `java -version` 25 | 装 JDK 21 + SDK 36 + Git | P0 |
 | R15 | compileSdk 37 预览不稳定 | 中 | CI 失败 | 中 | AGP 不识别 37 | 36 发布，37 独立验证 | P0/P6 |
+| R16 | GitHub API / Pages 国内访问不稳 | 高 | 官网历史版本与更新检查失败 | 高 | 请求超时、403/429 | 构建期生成静态索引；Gitee 镜像兜底；24h 缓存与手动源切换 | P7 |
+| R17 | Gitee 同步/附件上传受平台限制 | 中高 | 双源失效、国内下载断 | 高 | API 401/403、附件超限 | 先做仓库镜像与 Release 资产；失败重试并标记 stale；保留 GitHub 主源 | P7 |
+| R18 | 地理检测误判或隐私争议 | 中 | 下载源错误、合规质疑 | 中 | VPN/代理、接口失败 | 仅取国家码、3s 超时、失败按非大陆默认 GitHub、提供手动切换与隐私说明 | P7 |
 
 ---
 
@@ -334,6 +341,9 @@ Provider 实现只负责“请求构造 + 响应映射 + 错误码翻译”，UI
 | ADR-08 | 语音：`AsrEngine`/`TtsEngine` 接口 + 可替换实现 | 便于 Vosk→sherpa 替换 | 多一层抽象 |
 | ADR-09 | 通话状态机独立于 ChatViewModel | 通话有 ASR/TTS/打断/音频焦点多状态 | 需清晰状态图 |
 | ADR-10 | 导出格式版本化（`format_version`）+ ZIP 携带图片 | 可重导入、可迁移 | 解析器需兼容旧版 |
+| ADR-11 | 更新检查读静态 `updates/{channel}.json`，不直接依赖 GitHub Release API | 避免移动端限流/被墙；CI 生成、Pages/Gitee 双托管 | 清单需原子发布、缓存一致性 |
+| ADR-12 | 官网地理路由采用客户端 IP 国家码 + 时区/语言兜底，不上服务端 | 纯 GitHub Pages 无服务端；隐私影响小 | VPN 误判，需手动切换 |
+| ADR-13 | 下载直链 Release 资产，不经 Pages 代理 APK | 不消耗 Pages 流量、无跳转落地页 | 依赖 GitHub/Gitee 资产可用性 |
 
 **通话状态机（建议）**
 
@@ -453,7 +463,7 @@ Speaking → Interrupted(VAD 命中) → Listening
 | P5-13 | 降档/恢复/归档 | 进入 low、挂断还原、写记忆池 | P5-08 | 0.5 | 参数隔离 |
 | P5-14 | 通话真机测试 | 回声/延迟/打断/1h 耗电；不启用 P5-06 时系统 TTS 全链路 | P5-12 | 1.0 | 报告归档 |
 
-> P5-06 为 P1 可选：首版不做时扣减 1.5 人日，总工作量降至 79.5 人日；阶段 5 验收以 P5-01～P5-05、P5-07～P5-14 为准。
+> P5-06 为 P1 可选：首版不做时扣减 1.5 人日，总工作量降至 88.0 人日；阶段 5 验收以 P5-01～P5-05、P5-07～P5-14 为准。
 
 ### 5.7 阶段 6：导入导出与全版本适配（10 人日）
 
@@ -471,7 +481,7 @@ Speaking → Interrupted(VAD 命中) → Listening
 | P6-10 | 性能优化 | baseline profile、列表 key、渲染缓存 | P3-13 | 1.5 | 启动/帧率达标 |
 | P6-11 | 可访问性/国际化 | contentDescription、字符串 | P4-11 | 0.5 | Scanner 无阻断 |
 
-### 5.8 阶段 7：测试与发布（7 人日）
+### 5.8 阶段 7：测试与发布（15.5 人日，含 §5.9 发布增量）
 
 | ID | 任务 | 关键产出 | 依赖 | 人日 | 验收 |
 |---|---|---|---|---|---|
@@ -480,24 +490,274 @@ Speaking → Interrupted(VAD 命中) → Listening
 | P7-03 | 性能/耗电/内存 | Macrobenchmark、LeakCanary | P6-10 | 1.0 | 达标报告 |
 | P7-04 | Lint/依赖/许可证审计 | 无废弃 API、无 GPL | P7-01 | 1.0 | 报告通过 |
 | P7-05 | R8/签名/打包 | release APK/AAB、mapping | P7-04 | 1.0 | 可安装 |
-| P7-06 | GitHub 发布 | README、截图、Release Notes、宣传图 | P7-05 | 0.5 | Release 可下载 |
+| P7-06 | GitHub Release 基线 | README、截图、Release Notes、宣传图、正式版/测试版 Release | P7-05 | 0.5 | Release 可下载；资产命名合规 |
 | P7-07 | 隐私/关于页定稿 | 隐私声明、第三方声明、开源协议 | P4-11 | 0.5 | 文案齐全 |
 | P7-08 | 合规复审 | 名称/图标/色值/文案 | P7-07 | 0.5 | 法务/自检通过 |
 | P7-09 | RC 回归 | 全量回归、打 tag | P7-08 | 0.5 | 无 P0/P1 缺陷 |
 
-### 5.9 工作量汇总
+> 本节 P7-01～P7-09 合计 7.0 人日；P7-10～P7-16 见 §5.9.9，合计 8.5 人日；阶段 7 总计 15.5 人日。
+
+### 5.9 版本升级与软件发布计划（P7 增量，8.5 人日）
+
+本节是 P7 的发布增量：解决“用户如何知道有新版本、国内如何下载、官网如何展示与分发”三个问题。**GitHub Releases 是唯一发布事实源，Gitee 是同版本镜像源，GitHub Pages 是官网与更新清单托管面**；不在客户端内置任何私有下载服务器。
+
+#### 5.9.1 目标、渠道与边界
+
+| 项 | 规则 |
+|---|---|
+| 升级提醒 | 应用内每 **24 小时**检查一次；发现更高版本后在应用内提示，不静默安装 |
+| 更新通道 | `stable`（正式版，默认）与 `beta`（测试版，需用户在设置中主动开启） |
+| 正式源 | GitHub Releases；发布资产、更新清单、官网由 GitHub 托管 |
+| 镜像源 | P7 全部验收后，由 GitHub Actions 自动同步仓库、标签、Release 资产到 Gitee |
+| 官网 | GitHub Pages + Vite 静态站；中国大陆访问时下载 CTA 优先切到 Gitee |
+| 不做 | 不做应用内代理下载服务器、不做静默安装、不绕过 Android 签名/未知来源校验、不承诺应用商店上架 |
+
+#### 5.9.2 版本号、发布性质与包命名
+
+**版本号**采用 SemVer：`MAJOR.MINOR.PATCH`；预发布追加 `-beta.N`。Android `versionCode` 必须单调递增，不能回退。建议 `versionCode = MAJOR*1_000_000 + MINOR*10_000 + PATCH*100 + 通道位`，正式版通道位 `99`，测试版取 `1..98`（beta 序号），确保同版本正式版始终高于 beta，且后续补丁版继续递增。
+
+**发布性质**只允许两种：
+
+- `正式版`：`stable` 通道，GitHub Release 的 `prerelease=false`，官网“最新正式版”只取此类。
+- `测试版`：`beta` 通道，`prerelease=true`，只在用户开启测试通道后提示。
+
+**软件包命名格式（强制）**：
+
+```text
+{软件名}-{发布性质}-{版本号}.apk
+```
+
+示例：
+
+```text
+SOFTSEEK-正式版-v1.2.3.apk
+SOFTSEEK-测试版-v1.3.0-beta.1.apk
+```
+
+约束：
+
+- 软件名固定大写 `SOFTSEEK`；发布性质固定中文 `正式版` / `测试版`；版本号带 `v` 前缀且只出现一次。
+- 仅使用半角连字符 `-`，不得有空格、下划线、括号、斜杠、冒号；扩展名固定 `.apk`。
+- Release tag 与版本号一致：`v1.2.3`、`v1.3.0-beta.1`；Release 标题为 `SOFTSEEK 正式版 v1.2.3` / `SOFTSEEK 测试版 v1.3.0-beta.1`。
+- 每个 APK 必须同时生成 `.sha256` 校验文件；GitHub/Gitee 资产文件名和 SHA256 必须完全一致。
+- `mapping.txt`、签名材料、密钥、token 一律不进公开 Release；AAB 不作为官网直接下载项。
+- CI 在发布前校验：APK 的 `versionName`/`versionCode`、文件名、tag、清单字段四者一致；不一致直接失败。
+
+#### 5.9.3 更新清单（update manifest）
+
+更新检查不直接让手机端打 GitHub Release API，而是读取 CI 生成的静态清单，避免移动网络被墙、API 限流和解析差异。清单随官网一起部署：
+
+```text
+https://we007oneday-byte.github.io/SoftSeek/updates/stable.json
+https://we007oneday-byte.github.io/SoftSeek/updates/beta.json
+```
+
+Gitee 镜像仓库保存同一份文件，作为中国大陆兜底：
+
+```text
+https://gitee.com/{GITEE_OWNER}/SoftSeek/raw/main/updates/stable.json
+https://gitee.com/{GITEE_OWNER}/SoftSeek/raw/main/updates/beta.json
+```
+
+清单最小字段：
+
+| 字段 | 说明 |
+|---|---|
+| `schemaVersion` | 固定 `1`，客户端遇到未知版本拒绝解析 |
+| `channel` | `stable` / `beta` |
+| `versionName` / `versionCode` | 必须与 APK 一致；客户端以 `versionCode` 比较 |
+| `tag` / `publishedAt` | Release tag 与 UTC 发布时间 |
+| `minSdk` | 最低 Android API；低于此值不提示 |
+| `minSupportedVersionCode` | 低于该版本的客户端标记为“必须更新”，不提供“跳过” |
+| `releaseNotes` | 简短更新说明，官网与提醒弹窗共用 |
+| `assets[]` | `name`、`size`、`sha256`、`githubUrl`、`giteeUrl` |
+
+发布顺序必须是：**先上传 Release 资产 → 再提交清单 → 再部署 Pages**。清单更新采用“写临时文件 + 原子替换 + 提交”，避免用户读到半成品。
+
+#### 5.9.4 应用内 24 小时升级检查
+
+**调度**：使用 WorkManager 唯一周期任务 `update-check`，周期 `24h`，弹性窗口 `1h`，约束 `NetworkType.CONNECTED`；`ExistingPeriodicWorkPolicy.UPDATE`，避免重复入队。应用冷启动时若 `lastCheckAt` 超过 24 小时，立即补一次前台检查。Android 的 Doze/厂商调度可能延后，验收口径是“24 小时周期 + 系统允许时尽快执行”，不是精确到秒。
+
+**数据与状态**（DataStore）：
+
+- `lastCheckAt`、`lastCheckSource`、`etagStable`、`etagBeta`
+- `pendingVersionCode`、`pendingVersionName`、`pendingChannel`
+- `skippedVersionCode`、`snoozedUntil`
+- `updateChannel`（默认 `stable`）
+
+**源选择**：
+
+1. 设置项“更新源”默认 `自动`：系统时区为 `Asia/Shanghai` / `Asia/Urumqi` / `Asia/Chongqing`，或系统语言为 `zh-CN` 时，优先 Gitee 清单；否则优先 GitHub Pages。
+2. 首选源 5 秒超时或非 2xx 时，自动切另一源；两源都失败则保留 `pending` 状态，不打扰用户，下一次再试。
+3. 手动检查忽略 24h 间隔，但仍走同一套源回退。
+4. 带 `If-None-Match` 请求；304 时只更新 `lastCheckAt`。
+
+**版本比较与提醒**：
+
+- 仅同通道比较；`manifest.versionCode > BuildConfig.VERSION_CODE` 才提示。
+- 发现新版本后写入 `pending*`；用户下次进入应用前台时显示应用内弹窗。
+- 按钮：`立即更新` / `稍后` / `跳过此版本`；低于 `minSupportedVersionCode` 时只保留 `立即更新`。
+- `稍后` 24 小时内不再弹同一版本；`跳过此版本` 直到出现更高 `versionCode` 才再提示。
+- 弹窗展示版本号、更新说明、大小、SHA256 前 12 位、当前源与备用源；下载跳转官网下载页或 Release 直链，不在应用内静默下载安装。
+- 下载完成后如走应用内下载器，必须校验 SHA256；安装前由系统校验 APK 签名，签名不一致拒绝。
+
+**测试**：版本比较、同版本不提示、跨通道不提示、24h 抑制、跳过后新版本恢复提示、首选源超时回退、304、清单损坏/字段缺失、`minSupportedVersionCode` 强制更新。
+
+#### 5.9.5 GitHub → Gitee 双源同步
+
+**触发**：`release: published`、`workflow_dispatch`；仅允许 `v*` tag。正式发布任务挂在 GitHub Environment `production` 下，配置 Required reviewers，确保“所有工程验收完成”后人工批准才同步；日常测试版可走 `beta` environment。
+
+**同步范围**：
+
+1. `main` 分支与全部 tag 镜像到 Gitee（代码双源）。
+2. 同一 tag 的 Gitee Release：标题、说明、正式/测试性质、资产。
+3. APK、`.sha256`、更新清单 `updates/stable.json` / `beta.json`。
+4. 不镜像 GitHub Issues、PR、Actions 日志、Secrets。
+
+**Workflow 步骤（`.github/workflows/release-sync.yml`）**：
+
+1. Checkout 并校验：tag、`versionName`、`versionCode`、资产命名、SHA256、清单字段。
+2. 用 `GITEE_TOKEN` 或部署密钥把 `main` 与 tags 推到 Gitee；已存在则快进，不强制覆盖历史。
+3. 查询 Gitee 同 tag Release：存在则更新说明，不存在则创建；按资产名幂等上传，重名先删旧再传，禁止产生两个同名资产。
+4. 下载 Gitee 资产回读并计算 SHA256，与 GitHub 资产比对；不一致则失败。
+5. 生成/更新双源清单，提交到 `main`，推送 GitHub 与 Gitee；再触发 Pages 部署。
+6. 对 `githubUrl`、`giteeUrl` 各发一次 `HEAD` 请求，确认 200/302 且 `Content-Length` 与清单一致。
+7. 任一步失败：保留 GitHub Release 与已生成清单的 GitHub 链接，Gitee URL 置空并标记 `mirrorStatus=stale`；官网显示“码云镜像暂不可用，请用 GitHub”，不让整个发布静默失败。
+
+**Secrets（只放 GitHub Environment Secrets）**：
+
+- `GITEE_TOKEN`：最小权限，仅仓库写与 Release 资产上传。
+- `GITEE_OWNER`、`GITEE_REPO`：默认与 GitHub 同名，可覆盖。
+- 可选 `GITEE_SSH_PRIVATE_KEY`：改用 SSH 镜像时使用。
+
+Token 不得写入代码、日志、Pages、清单或 APK；Workflow 日志对 URL 中的 token 做掩码。
+
+**平台约束**：
+
+- Gitee 仓库需提前创建并完成实名/权限配置；Release 资产有大小/频率限制，超限时改用分卷或对象存储不在本期范围。
+- Gitee Release 没有 GitHub 的 `prerelease` 布尔语义，正式/测试性质以 Release 标题和清单 `channel` 为准；历史正式版过滤只在 GitHub 索引侧执行。
+- Gitee Pages 首次开通可能需要人工审核；本计划不依赖 Gitee Pages，官网始终在 GitHub Pages，Gitee 只提供仓库/Release/raw 清单。
+- 国内用户即使无法访问 GitHub Pages，也可通过应用内 Gitee raw 清单获得更新提示，再走 Gitee Release 下载。
+
+#### 5.9.6 官网：GitHub Pages + Vite
+
+**站点与工程**：
+
+- 线上地址：`https://we007oneday-byte.github.io/SoftSeek/`（项目 Pages）。
+- 源码目录：`website/`；技术栈固定为 **Vite + React + TypeScript**，静态构建；`vite.config.ts` 的 `base` 设为 `/SoftSeek/`。
+- 初始化：`npm create vite@latest website -- --template react-ts`。
+- 构建：Node 20，`npm ci && npm run build`，产物 `website/dist/`。
+- 部署：`.github/workflows/pages.yml`，使用 `actions/upload-pages-artifact` + `actions/deploy-pages`；Pages Source 设为“GitHub Actions”，权限 `pages: write`、`id-token: write`，并发组 `pages`。
+- 触发：`push` 到 `main` 且路径含 `website/**`、`release: published`、`workflow_dispatch`。
+- 本地开发：`cd website && npm ci && npm run dev`；不在 Android 工程内引入 Node 依赖。
+
+```text
+website/
+├── index.html
+├── vite.config.ts          # base: '/SoftSeek/'
+├── package.json
+├── src/
+│   ├── main.tsx
+│   ├── pages/              # 介绍 / 功能 / API / 指南 / 下载 / 历史 / FAQ
+│   ├── components/         # Hero、Sidebar、DownloadButton、SourceBadge
+│   └── data/releases.json  # CI 生成，不在页面运行时直连 GitHub API
+└── dist/                   # Pages 部署产物
+```
+
+**视觉与信息架构**：参考 Vite 官网的“顶部导航 + 侧边栏文档 + Hero + 特性网格 + 代码块”信息架构与明暗主题，但**不使用 Vite 商标、Logo、文案或素材**；SOFTSEEK 使用自有品牌色与图标。移动端优先，桌面端最大宽度约 1280px。
+
+**页面与内容（均为详细版，不接受一句话占位）**：
+
+| 页面 | 必备内容 | 验收 |
+|---|---|---|
+| 首页 Hero | 软件名、一句话定位、当前正式版号、`下载最新正式版`主 CTA、GitHub/Gitee 入口、非官方声明 | 首屏 3 秒内可开始下载 |
+| 软件介绍 | 是什么、给谁用、纯本地/零服务端、与官方客户端区别、不收集数据、支持范围 | 无夸大/无“官方”误导 |
+| 功能介绍 | 聊天/思考、图片多模态、模型与档位、记忆池与清理、语音（P5 状态）、主题、多 Key、导入导出；每项配截图或状态标签 | 功能与已发布版本一致 |
+| API 接入指南 | 注册 DeepSeek、创建 Key、余额与计费、应用内填写、BaseURL、模型选择、图片限制、错误码（401/402/429/5xx）、代理与安全 | 新用户可按步骤完成首次对话 |
+| 软件使用指南 | 安装与未知来源、首次配置、会话、发图、模型/档位、记忆清理预览、导出/导入、语音、常见问题与故障排查 | 每步有编号与截图 |
+| 下载中心 | 最新正式版卡片、测试版入口、版本/日期/大小/minSdk/SHA256、主源+备用源按钮、更新说明 | 不跳 GitHub 落地页 |
+| 历史版本 | 正式版列表、测试版折叠区、版本/日期/大小/SHA、双源按钮、分页 | 至少 3 个历史版本可回退 |
+| 隐私与免责 | 非官方声明、Key 本地加密、聊天本地存储、地理检测仅国家码、第三方链接 | 与关于页文案一致 |
+| FAQ/更新日志 | 安装失败、Key 无效、图片过大、更新源切换、Gitee 镜像不可用 | 覆盖前 10 个高频问题 |
+
+**SEO/性能/可访问性**：静态 HTML 可抓取；`title`/`description`/Open Graph；`sitemap.xml`；图片 `alt`；键盘焦点可见；Lighthouse Performance/Accessibility/SEO ≥ 90；不引入统计脚本和第三方 Cookie。
+
+#### 5.9.7 下载中心、历史版本与地理路由
+
+**数据来源（同时满足“通过 GitHub API 检索”与国内可用）**：
+
+- GitHub Actions 在发布/定时任务中调用 `GET /repos/{owner}/{repo}/releases?per_page=100`，按 `Link` 头继续翻页直到取完（最多 300 条），读取 `tag_name`、`prerelease`、`published_at`、`assets[].browser_download_url`、`size`，生成 `website/src/data/releases.json`。
+- 页面运行时优先读取这份静态索引；索引缺失时才回退到 GitHub Releases API（带 `Accept`、`User-Agent`、ETag；未认证限流 60 次/小时）。
+- Gitee API `GET /api/v5/repos/{owner}/{repo}/releases` 只用于镜像健康检查/备用链接，不替代 GitHub 历史索引。
+- 只把 `prerelease=false` 放入“历史正式版”；测试版单独折叠，默认不展示。
+
+**最新正式版**：取 `releases/latest` 或静态索引中 `channel=stable` 的最高 `versionCode`；只展示命名合规且带 `.apk` 的资产；按钮直接指向资产的 `browser_download_url`，不经 Release 页面跳转。GitHub/Gitee 两个资产都必须存在且 SHA256 相同。
+
+**历史版本**：按 SemVer 倒序，展示版本号、发布日期、大小、SHA256 前 12 位、正式/测试标签、主源/备源按钮；每个版本可复制直链；支持 `?channel=beta` 过滤。
+
+**地理路由（实时、失败安全）**：
+
+1. 页面加载后异步请求国家码接口（默认 `https://api.country.is/`，3 秒超时；接口可替换），只取两位国家码，不取经纬度、不写 Cookie。
+2. 返回 `CN` → 主下载源 Gitee，GitHub 作为“备用源”；非 `CN` → 主源 GitHub，Gitee 作为备用。
+3. 检测失败/超时 → 读取 `Intl.DateTimeFormat().resolvedOptions().timeZone`：`Asia/Shanghai`、`Asia/Urumqi`、`Asia/Chongqing` 或 `navigator.language` 以 `zh-CN` 开头 → Gitee；否则按需求默认 GitHub。
+4. 检测成功后立即重写所有下载 CTA 与历史版本主按钮，并显示来源徽标：`中国大陆推荐：码云镜像` / `GitHub 主源`。
+5. 提供手动切换开关，覆盖自动结果直到刷新页面；不持久化地理位置。
+6. 若选中源资产 404/超时，按钮降级到另一源并提示“镜像暂不可用”。
+
+**直接下载**：
+
+- CTA 使用 `<a href="{asset.browser_download_url}" rel="noopener">`，不经过 `github.com/.../releases` 页面；浏览器由 `Content-Disposition` 直接落盘。
+- 不把 APK 放进 Pages 仓库、不用 Pages 代理二进制，避免流量与仓库体积问题。
+- 每个按钮旁展示 `版本号 · 大小 · SHA256 前 12 位`；另提供“复制直链”和“校验说明”。
+
+#### 5.9.8 发布 Runbook（每次发版照此执行）
+
+1. 冻结代码，更新 `versionName` / `versionCode`、`CHANGELOG.md`、官网文案中的版本号。
+2. 跑完整质量门：ktlint、lint、单测/仪器测试、R8 release 构建、签名校验。
+3. 生成 `SOFTSEEK-正式版-vX.Y.Z.apk` 与 `.sha256`；测试版用 `SOFTSEEK-测试版-vX.Y.Z-beta.N.apk`。
+4. 打 tag `vX.Y.Z`，创建 GitHub Release；正式版 `prerelease=false`，测试版 `prerelease=true`；上传 APK 与 SHA。
+5. `release-sync` 在 `production` environment 人工批准后执行：镜像 Gitee、上传同 SHA 资产、生成双源清单。
+6. `pages` workflow 部署官网；等待 Pages 生效（通常 < 2 分钟）。
+7. 双端验收：非大陆网络访问 → GitHub 主源；大陆网络/时区 → Gitee 主源；应用内 24h 检查能读到新清单；历史版本列表可见。
+8. 归档发布记录：tag、commit、CI run、APK SHA256、Gitee Release URL、Pages URL。
+
+#### 5.9.9 P7 增量任务与验收
+
+| ID | 任务 | 关键产出 | 依赖 | 人日 | 验收 |
+|---|---|---|---|---|---|
+| P7-10 | 清单与命名规范 | `updates/*.json` schema、命名校验脚本、CI 版本一致性检查 | P7-05 | 1.0 | 资产名/tag/versionCode/清单四者一致 |
+| P7-11 | 应用内升级检查 | WorkManager 24h、双源清单、DataStore 状态、手动检查 | P7-05 | 1.5 | 24h 唯一任务；首选源失败自动回退；304 不重复提示 |
+| P7-12 | 升级提醒 UI | 应用内弹窗、稍后/跳过/强制更新、下载跳转与 SHA 提示 | P7-11 | 1.0 | 同版本只提示一次；跳过后新版本恢复；强制更新不可跳过 |
+| P7-13 | Gitee 双源同步 | `release-sync.yml`、镜像/Release/资产、回读校验、stale 降级 | P7-10 | 1.0 | 同名资产 SHA 一致；重复执行不产生重复资产 |
+| P7-14 | 官网工程与 Pages | `website/` Vite 工程、`pages.yml`、base path、明暗主题 | P7-05 | 1.0 | Pages URL 可访问；子路径资源不 404 |
+| P7-15 | 官网内容 | 介绍/功能/API 指南/使用指南/隐私/FAQ 详细页 | P7-14 | 1.5 | 页面清单全覆盖；新用户照文档可完成首次对话 |
+| P7-16 | 下载中心与地理路由 | 最新正式版、历史版本、GitHub API 索引、国家码路由、直链 | P7-13/P7-14 | 1.5 | 大陆→Gitee、非大陆→GitHub；直链不跳落地页；历史≥3 版 |
+| **合计** | | | | **8.5** | |
+
+**新增验收证据**：
+
+- GitHub/Gitee 两个 Release 页面截图 + 两资产 SHA256 对比。
+- `stable.json` / `beta.json` 原始文件与 schema 校验日志。
+- 应用内更新检查的 WorkManager 日志、两源切换录屏、24h 抑制测试记录。
+- Pages 部署 run、官网桌面/移动截图、Lighthouse 报告。
+- 大陆/非大陆两种网络下的下载 CTA 切换录屏（可用代理模拟，报告中注明）。
+- 历史版本列表截图与至少一次旧版本回退安装记录。
+
+### 5.10 工作量汇总
 
 | 阶段 | 人日 | 占比 | 主要风险 |
 |---|---|---|---|
-| P0 工具链/契约 | 4.5 | 5.6% | 环境、Key 可用性 |
-| P1 工程基础 | 6.0 | 7.4% | 低 |
-| P2 数据/记忆池 | 9.0 | 11.1% | 清理规则、附件模型 |
-| P3 API/聊天 | 15.0 | 18.5% | SSE、Markdown 库 |
-| P4 多模态/设置 | 14.0 | 17.3% | Key 加密、配置一致性 |
-| P5 通话 | 15.5 | 19.1% | 回声、16KB、贴脸熄屏 |
-| P6 迁移/适配 | 10.0 | 12.3% | 官方格式、性能 |
-| P7 测试/发布 | 7.0 | 8.6% | 回归、合规 |
-| **合计** | **81.0** | 100% | 含 20% 缓冲约 **97 人日** |
+| P0 工具链/契约 | 4.5 | 5.0% | 环境、Key 可用性 |
+| P1 工程基础 | 6.0 | 6.7% | 低 |
+| P2 数据/记忆池 | 9.0 | 10.1% | 清理规则、附件模型 |
+| P3 API/聊天 | 15.0 | 16.8% | SSE、Markdown 库 |
+| P4 多模态/设置 | 14.0 | 15.6% | Key 加密、配置一致性 |
+| P5 通话 | 15.5 | 17.3% | 回声、16KB、贴脸熄屏 |
+| P6 迁移/适配 | 10.0 | 11.2% | 官方格式、性能 |
+| P7 测试/发布（含升级/官网/双源） | 15.5 | 17.3% | 回归、合规、双源可用性 |
+| **合计** | **89.5** | 100% | 含 20% 缓冲约 **107.4 人日** |
+
+> P7 原 7.0 人日为测试、签名与 GitHub 发布基线；本次新增 8.5 人日为 P7-10～P7-16（24h 升级检查、Gitee 双源、Vite 官网、地理路由下载）。
 
 ---
 
@@ -512,7 +772,7 @@ Speaking → Interrupted(VAD 命中) → Listening
 | M4 完整体验 | 48.5 | W8～W10 | 多模态/模型/设置/Key | 阶段 4 验收项全过 |
 | M5 通话可用 | 64.0 | W11～W13 | ASR/TTS/打断/通话页 | 阶段 5 验收项全过 |
 | M6 可迁移/可适配 | 74.0 | W14～W15 | 导入导出/11～17/性能 | 阶段 6 验收项全过 |
-| M7 可发布 | 81.0 | W16～W17 | RC、APK/AAB、GitHub | 阶段 7 验收项全过 |
+| M7 可发布 | 89.5 | W18～W19 | RC、APK/AAB、GitHub/Gitee 双源、Vite 官网、更新清单 | 阶段 7 含 §5.9 验收项全过 |
 
 > 日历周按 5 天/周、1 人全职估算；若只能业余投入，按实际可用小时折算，不要按周直接承诺。
 
@@ -531,6 +791,7 @@ Speaking → Interrupted(VAD 命中) → Listening
 | §12.1 功能清单 | P7-02 | 逐项勾选表 + 缺陷链接 |
 | §12.2 兼容矩阵 | P0-06/P6-07/P7-02 | 机型/版本表格 |
 | §12.3 性能指标 | P6-10/P7-03 | Macrobenchmark/Battery 报告 |
+| 本次新增 §5.9 发布/升级 | P7-10～P7-16 | 双源 Release SHA 对比、24h 检查日志、Pages 部署、地理路由录屏、历史版本回退记录 |
 
 ---
 
@@ -758,6 +1019,13 @@ sdkmanager --list
 | P7-07 | P7 | 隐私/关于 | 待开始 | | |
 | P7-08 | P7 | 合规复审 | 待开始 | | |
 | P7-09 | P7 | RC 回归 | 待开始 | | |
+| P7-10 | P7 | 清单与命名规范 | 待开始 | | |
+| P7-11 | P7 | 应用内升级检查 | 待开始 | | |
+| P7-12 | P7 | 升级提醒 UI | 待开始 | | |
+| P7-13 | P7 | Gitee 双源同步 | 待开始 | | |
+| P7-14 | P7 | 官网工程/Pages | 待开始 | | |
+| P7-15 | P7 | 官网内容 | 待开始 | | |
+| P7-16 | P7 | 下载中心/地理路由 | 待开始 | | |
 
 ---
 
