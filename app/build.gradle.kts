@@ -1,3 +1,7 @@
+import org.gradle.api.tasks.testing.Test
+import org.gradle.testing.jacoco.plugins.JacocoTaskExtension
+import org.gradle.testing.jacoco.tasks.JacocoReport
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -5,6 +9,7 @@ plugins {
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
     alias(libs.plugins.ktlint)
+    id("jacoco")
 }
 
 android {
@@ -39,6 +44,10 @@ android {
         jvmTarget = "17"
     }
 
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
+    }
+
     buildFeatures {
         compose = true
     }
@@ -53,6 +62,51 @@ android {
     ktlint {
         android.set(true)
     }
+}
+
+jacoco {
+    toolVersion = "0.8.12"
+}
+
+tasks.withType<Test>().configureEach {
+    extensions.configure<JacocoTaskExtension> {
+        isIncludeNoLocationClasses = true
+        excludes = listOf("jdk.internal.*")
+    }
+}
+
+tasks.register<JacocoReport>("jacocoDebugReport") {
+    dependsOn("testDebugUnitTest")
+    reports {
+        xml.required.set(true)
+        html.required.set(true)
+        csv.required.set(false)
+    }
+    val classesDir = layout.buildDirectory.dir("tmp/kotlin-classes/debug").get().asFile
+    val p2Classes = fileTree(classesDir) {
+        include(
+            "io/github/we007oneday_byte/softseek/data/local/**",
+            "io/github/we007oneday_byte/softseek/data/repository/**",
+            "io/github/we007oneday_byte/softseek/data/cleanup/**",
+            "io/github/we007oneday_byte/softseek/domain/**",
+        )
+        exclude(
+            "**/*_Factory*",
+            "**/*_HiltComponents*",
+            "**/*_Impl*",
+            "**/R.class",
+            "**/R$*.class",
+            "**/BuildConfig.class",
+        )
+    }
+    classDirectories.setFrom(p2Classes)
+    sourceDirectories.setFrom(files("src/main/java"))
+    executionData.setFrom(layout.buildDirectory.file("jacoco/testDebugUnitTest.exec"))
+}
+
+ksp {
+    arg("room.schemaLocation", "$projectDir/schemas")
+    arg("room.generateKotlin", "true")
 }
 
 dependencies {
@@ -72,9 +126,19 @@ dependencies {
     implementation(libs.navigation.compose)
     implementation(libs.core.splashscreen)
     implementation(libs.hilt.android)
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    implementation(libs.work.runtime.ktx)
+    implementation(libs.androidx.hilt.work)
     ksp(libs.hilt.compiler)
+    ksp(libs.room.compiler)
+    ksp(libs.androidx.hilt.compiler)
 
     testImplementation(libs.junit)
+    testImplementation(libs.room.testing)
+    testImplementation(libs.robolectric)
+    testImplementation(libs.androidx.test.core)
+    testImplementation(libs.kotlinx.coroutines.test)
 
     debugImplementation(libs.compose.ui.tooling)
 }

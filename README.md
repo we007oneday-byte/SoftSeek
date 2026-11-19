@@ -6,7 +6,7 @@ SOFTSEEK（SK）是一个纯 Android 原生、Kotlin + Jetpack Compose 的 DeepS
 
 ## 当前状态
 
-**阶段 1：可编译空壳（P1 工程基础）**
+**阶段 2：数据库与记忆池（P2 数据层）**
 
 已完成：
 
@@ -18,15 +18,26 @@ SOFTSEEK（SK）是一个纯 Android 原生、Kotlin + Jetpack Compose 的 DeepS
 - 设置项三种形态（普通 / 开关 / 值）、通用按钮、Markdown 占位
 - 引导页、通话页、关于页占位
 - 自适应启动图标（含 monochrome）与 SplashScreen
-- Android Lint 0 error、JVM 单测、GitHub Actions CI
+- Room 四张表：`memory_pool_blocks`、`memory_heap_nodes`、`message_attachments`、`memory_pool_config`
+- 外键级联、`tags` JSON 转换、枚举转换、`schema` 导出到 `app/schemas/`
+- 块/节点/附件/配置 DAO 与 `ConversationRepository`、`MemoryPoolRepository`
+- 池块生命周期：新建、重命名、置顶、软删、恢复
+- 清理引擎：自动清理默认关闭；手动 `cleanupNow(preview)` 支持预览/取消；阈值 2 条、保护期 24h、置顶排除
+- 回收站：`deletedAt` 生效，每日 Worker 永久删除超过 7 天的池块
+- 上下文拼装：系统提示、倒序截断、剥离 reasoning、图片按 384 tokens 估算
+- Token 估算与 usage 校准
+- Robolectric + Room in-memory 测试 21 项；P2 数据/领域层行覆盖率 92.2%
+- Android Lint 0 error、ktlint、JVM 单测、GitHub Actions CI
 
-尚未接入：Room、Retrofit/OkHttp、DataStore、Vosk、导入导出。按任务书 P1～P7 推进。
+尚未接入：Retrofit/OkHttp、DataStore、Vosk、导入导出。按任务书 P3～P7 推进。
 
 ## 技术栈
 
 - Kotlin 2.0.20
 - Jetpack Compose（BOM 2024.10.01，Material3）
 - Navigation Compose 2.7.7
+- Room 2.7.2 + KSP
+- WorkManager 2.10.0 + Hilt Worker
 - AGP 8.9.0 / Gradle 8.11.1
 - `minSdk 30`，`targetSdk 36`，`compileSdk 36`
 - JDK 21
@@ -61,7 +72,20 @@ app/src/main/java/io/github/we007oneday_byte/softseek/
 ├── core/
 │   ├── constant/AppConstants.kt
 │   └── model/AppInfo.kt
-├── di/AppModule.kt
+├── data/
+│   ├── cleanup/            # CleanupEngine
+│   ├── local/
+│   │   ├── dao/            # 块 / 节点 / 附件 / 配置 DAO
+│   │   ├── entity/         # Room 实体与关系
+│   │   ├── converter/      # tags / 枚举 TypeConverter
+│   │   └── AppDatabase.kt
+│   ├── repository/         # Room 仓储实现
+│   └── worker/             # 回收站清理 Worker
+├── di/                     # AppModule / DatabaseModule / RepositoryModule
+├── domain/
+│   ├── context/            # ContextAssembler / TokenEstimator
+│   ├── model/              # 领域模型
+│   └── repository/         # 仓储接口
 └── ui/
     ├── components/common/   # CommonButton / SettingItem / MarkdownText
     ├── navigation/          # AppNavGraph
@@ -69,13 +93,17 @@ app/src/main/java/io/github/we007oneday_byte/softseek/
     └── theme/               # Color / Type / Theme / ThemeMode
 ```
 
+Room schema 导出目录：`app/schemas/io.github.we007oneday_byte.softseek.data.local.AppDatabase/1.json`。
+
 ## 质量检查
 
 ```powershell
-.\gradlew.bat ktlintCheck lintDebug testDebugUnitTest assembleDebug
+.\gradlew.bat ktlintCheck lintDebug testDebugUnitTest jacocoDebugReport assembleDebug
 ```
 
-CI 工作流见 `.github/workflows/android.yml`，在 push / PR 时执行同一组检查。
+覆盖率报告：`app/build/reports/jacoco/jacocoDebugReport/html/index.html`。
+
+CI 工作流见 `.github/workflows/android.yml`，在 push / PR 时执行构建、lint 与单测。
 
 ## 设计约束
 
