@@ -76,6 +76,18 @@ class ContextAssemblerTest {
         assertEquals(listOf("有效"), result.messages.map { it.content })
     }
 
+    @Test
+    fun partialAssistantIsNotSentBackAsContext() {
+        val history = listOf(
+            message("u1", MessageRole.USER, "问题", 1L),
+            message("a1", MessageRole.ASSISTANT, "被中断的一半", 2L, status = MessageStatus.PARTIAL),
+            message("u2", MessageRole.USER, "继续", 3L),
+        )
+        val result = assembler.assemble(null, history, maxInputTokens = 1000)
+
+        assertEquals(listOf("问题", "继续"), result.messages.map { it.content })
+    }
+
     private fun message(
         id: String,
         role: MessageRole,

@@ -33,7 +33,7 @@ class ContextAssembler
                 .asSequence()
                 .filter { it.role != MessageRole.SYSTEM }
                 .filter { !it.isDeleted }
-                .filter { it.status != MessageStatus.FAILED }
+                .filter { it.status == MessageStatus.COMPLETE }
                 .filter { it.content.isNotBlank() || it.attachments.isNotEmpty() }
                 .sortedBy { it.timestamp }
                 .toList()

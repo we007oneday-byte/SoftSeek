@@ -88,13 +88,15 @@ class RoomConversationRepository
                 attachmentDao.upsertAll(attachments.map { it.toEntity() })
             }
             if (message.role != MessageRole.SYSTEM && !message.isDeleted) {
-                val preview = message.content.take(PREVIEW_LENGTH).ifBlank { ATTACHMENT_PREVIEW }
-                blockDao.updateLastMessage(
-                    poolId = message.conversationId,
-                    lastMessageAt = message.timestamp,
-                    preview = preview,
-                    updatedAt = message.timestamp,
-                )
+                val preview = message.content.take(PREVIEW_LENGTH)
+                if (preview.isNotBlank() || message.attachments.isNotEmpty()) {
+                    blockDao.updateLastMessage(
+                        poolId = message.conversationId,
+                        lastMessageAt = message.timestamp,
+                        preview = preview.ifBlank { ATTACHMENT_PREVIEW },
+                        updatedAt = message.timestamp,
+                    )
+                }
             }
         }
 

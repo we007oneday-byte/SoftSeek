@@ -1,25 +1,37 @@
 package io.github.we007oneday_byte.softseek.ui.screens.settings
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.we007oneday_byte.softseek.R
 import io.github.we007oneday_byte.softseek.core.constant.AppConstants
 import io.github.we007oneday_byte.softseek.ui.components.common.SettingItem
@@ -40,6 +52,9 @@ fun SettingsScreen(
     onOpenAbout: () -> Unit = {},
     onOpenGuide: () -> Unit = {},
 ) {
+    val viewModel: SettingsViewModel = hiltViewModel()
+    val apiKey by viewModel.apiKey.collectAsStateWithLifecycle()
+    var showApiKeyDialog by remember { mutableStateOf(false) }
     val themeLabel = stringResource(
         when (ThemeManager.mode) {
             ThemeMode.SYSTEM -> R.string.settings_theme_system
@@ -77,7 +92,12 @@ fun SettingsScreen(
                     items = listOf(
                         SettingsEntry(
                             title = stringResource(R.string.settings_api_key),
-                            subtitle = stringResource(R.string.settings_api_key_not_set),
+                            subtitle = if (apiKey.isNullOrBlank()) {
+                                stringResource(R.string.settings_api_key_not_set)
+                            } else {
+                                stringResource(R.string.settings_api_key_set)
+                            },
+                            onClick = { showApiKeyDialog = true },
                         ),
                         SettingsEntry(
                             title = stringResource(R.string.settings_base_url),
@@ -211,6 +231,74 @@ fun SettingsScreen(
             }
         }
     }
+
+    if (showApiKeyDialog) {
+        ApiKeyDialog(
+            initialKey = apiKey,
+            onSave = viewModel::saveApiKey,
+            onClear = viewModel::clearApiKey,
+            onDismiss = { showApiKeyDialog = false },
+        )
+    }
+}
+
+@Composable
+private fun ApiKeyDialog(
+    initialKey: String?,
+    onSave: (String) -> Unit,
+    onClear: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    var key by remember(initialKey) { mutableStateOf(initialKey.orEmpty()) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(stringResource(R.string.settings_api_key_dialog_title)) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = key,
+                    onValueChange = { key = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("API Key") },
+                    placeholder = { Text(stringResource(R.string.settings_api_key_dialog_hint)) },
+                    visualTransformation = PasswordVisualTransformation(),
+                )
+                Text(
+                    text = stringResource(R.string.settings_api_key_dialog_note),
+                    modifier = Modifier.padding(top = 12.dp),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.softSeekColors.textSecondary,
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    onSave(key)
+                    onDismiss()
+                },
+                enabled = key.isNotBlank(),
+            ) {
+                Text(stringResource(R.string.settings_api_key_save))
+            }
+        },
+        dismissButton = {
+            Row {
+                TextButton(
+                    onClick = {
+                        onClear()
+                        onDismiss()
+                    },
+                ) {
+                    Text(stringResource(R.string.settings_api_key_clear))
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(R.string.settings_api_key_cancel))
+                }
+            }
+        },
+    )
 }
 
 @Composable

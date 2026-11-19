@@ -6,17 +6,13 @@ SOFTSEEK（SK）是一个纯 Android 原生、Kotlin + Jetpack Compose 的 DeepS
 
 ## 当前状态
 
-**阶段 2：数据库与记忆池（P2 数据层）**
+**阶段 3：API 接入与基础聊天（P3）**
 
 已完成：
 
 - Android 工程骨架、Gradle 版本目录、Compose 主题与导航
 - Hilt 依赖注入（`@HiltAndroidApp`、`AppInfo`）
 - 主题三模式（跟随系统 / 浅色 / 深色），设置页可循环切换
-- 聊天页空壳（会话抽屉、空状态、输入栏占位）
-- 设置页占位（API / 模型 / 聊天 / 通话 / 记忆 / 外观 / 数据 / 关于）
-- 设置项三种形态（普通 / 开关 / 值）、通用按钮、Markdown 占位
-- 引导页、通话页、关于页占位
 - 自适应启动图标（含 monochrome）与 SplashScreen
 - Room 四张表：`memory_pool_blocks`、`memory_heap_nodes`、`message_attachments`、`memory_pool_config`
 - 外键级联、`tags` JSON 转换、枚举转换、`schema` 导出到 `app/schemas/`
@@ -26,10 +22,19 @@ SOFTSEEK（SK）是一个纯 Android 原生、Kotlin + Jetpack Compose 的 DeepS
 - 回收站：`deletedAt` 生效，每日 Worker 永久删除超过 7 天的池块
 - 上下文拼装：系统提示、倒序截断、剥离 reasoning、图片按 384 tokens 估算
 - Token 估算与 usage 校准
-- Robolectric + Room in-memory 测试 21 项；P2 数据/领域层行覆盖率 92.2%
-- Android Lint 0 error、ktlint、JVM 单测、GitHub Actions CI
+- DeepSeek API Provider 抽象、DTO、Retrofit/OkHttp 网络层
+- `POST /chat/completions` 流式 SSE 解析：content、reasoning_content、finish_reason、usage、`[DONE]`
+- Base URL 强制 HTTPS 校验；连接 15s、普通读取 60s、流式读取 0
+- HTTP 错误映射：401/403、402、429、5xx、400 与网络/协议异常
+- 聊天状态机：发送、流式增量、停止（保留 partial）、重新生成、失败落库
+- 会话抽屉：列表、切换、新建、重命名、置顶、软删
+- 消息气泡：思考块折叠、Markdown/代码块、复制/分享/编辑/删除、token 与错误展示
+- 会话标题按首条消息本地截断；会话导出为纯文本分享
+- 设置页 API Key 输入（当前版本仅保存在内存，重启后失效；P4-08 接 Keystore）
+- Robolectric + Room in-memory + SSE/DTO/仓储测试 37 项；P3 整体行覆盖率 86.1%（681/791），分支 54.0%（134/248）
+- Android Lint 0 issue、ktlint、JVM 单测、GitHub Actions CI
 
-尚未接入：Retrofit/OkHttp、DataStore、Vosk、导入导出。按任务书 P3～P7 推进。
+尚未接入：API Key 加密持久化、附件/图片消息、DataStore、Vosk、导入导出。按任务书 P4～P7 推进。
 
 ## 技术栈
 
@@ -38,6 +43,7 @@ SOFTSEEK（SK）是一个纯 Android 原生、Kotlin + Jetpack Compose 的 DeepS
 - Navigation Compose 2.7.7
 - Room 2.7.2 + KSP
 - WorkManager 2.10.0 + Hilt Worker
+- Retrofit 2.11.0 + OkHttp 4.12.0 + kotlinx.serialization 1.7.3
 - AGP 8.9.0 / Gradle 8.11.1
 - `minSdk 30`，`targetSdk 36`，`compileSdk 36`
 - JDK 21
@@ -70,8 +76,10 @@ app/src/main/java/io/github/we007oneday_byte/softseek/
 ├── ChatApp.kt
 ├── MainActivity.kt
 ├── core/
+│   ├── auth/               # P3 内存 API Key Store（P4 换 Keystore）
 │   ├── constant/AppConstants.kt
-│   └── model/AppInfo.kt
+│   ├── model/AppInfo.kt
+│   └── network/            # BaseUrlValidator
 ├── data/
 │   ├── cleanup/            # CleanupEngine
 │   ├── local/
@@ -79,12 +87,15 @@ app/src/main/java/io/github/we007oneday_byte/softseek/
 │   │   ├── entity/         # Room 实体与关系
 │   │   ├── converter/      # tags / 枚举 TypeConverter
 │   │   └── AppDatabase.kt
-│   ├── repository/         # Room 仓储实现
+│   ├── remote/             # DeepSeekApi / DTO / SSE / Provider
+│   ├── repository/         # Room 仓储 + DefaultChatRepository
 │   └── worker/             # 回收站清理 Worker
-├── di/                     # AppModule / DatabaseModule / RepositoryModule
+├── di/                     # AppModule / DatabaseModule / NetworkModule / ProviderModule / AuthModule
 ├── domain/
+│   ├── auth/               # ApiKeyStore
 │   ├── context/            # ContextAssembler / TokenEstimator
 │   ├── model/              # 领域模型
+│   ├── provider/           # AiProvider / AiChatService
 │   └── repository/         # 仓储接口
 └── ui/
     ├── components/common/   # CommonButton / SettingItem / MarkdownText
