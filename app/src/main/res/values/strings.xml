@@ -31,8 +31,6 @@
     <string name="guide_desc">SOFTSEEK 是一个纯 Android 原生、零服务端的第三方 DeepSeek 客户端。你需要自行准备 DeepSeek API Key。</string>
     <string name="guide_start">开始使用</string>
     <string name="call_title">AI 通话</string>
-    <string name="call_placeholder">通话功能将在阶段 5 接入</string>
-    <string name="call_duration_placeholder">00:00</string>
     <string name="end_call">挂断</string>
     <string name="back">返回</string>
     <string name="settings_api_key_not_set">尚未配置</string>

@@ -18,9 +18,11 @@ P5 已完成：
 - Vosk 流式识别：`Recognizer.acceptWaveForm` 端点检测、partial 去重、final 输出、句尾 reset、错误事件
 - AudioRecord：16kHz/16bit/mono，优先 `VOICE_COMMUNICATION`，回退 `MIC`，可用时显式启用 `AcousticEchoCanceler`
 - 系统 TTS 封装：中文语言检测、语速/音调、stop/release、逐句回调；设置页提供试听入口
+- 通话状态机：Dialing/Listening/Thinking/Speaking/Ended/Error，半双工录音；ASR Final 触发 `ChatRepository` 流式回复，回复完成后系统 TTS 播报，播报结束回到 Listening；支持键盘输入、静音、挂断释放
+- 通话页：麦克风权限请求、状态/时长、partial 与双方字幕、静音/键盘/挂断按钮、键盘发送、错误提示
 - 新增 10 项模型/结果解析单测；当前 50 项单测、Lint 0 issue、debug APK 可构建
 
-P5 尚未接入：通话状态机、分句与打断、音频模式/焦点、前台服务、接近传感器、通话页 UI、真机测试。
+P5 尚未接入：分句与打断、音频模式/焦点、前台服务、接近传感器、降档/归档、真机测试。
 
 **阶段 4：多模态、模型与设置（P4，已完成）**
 
