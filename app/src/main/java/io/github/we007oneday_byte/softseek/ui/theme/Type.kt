@@ -80,6 +80,27 @@ fun scaledTypography(base: Typography, factor: Float): Typography {
     )
 }
 
+fun Typography.withFontFamily(family: FontFamily?): Typography {
+    if (family == null) return this
+    return Typography(
+        displayLarge = displayLarge.copy(fontFamily = family),
+        displayMedium = displayMedium.copy(fontFamily = family),
+        displaySmall = displaySmall.copy(fontFamily = family),
+        headlineLarge = headlineLarge.copy(fontFamily = family),
+        headlineMedium = headlineMedium.copy(fontFamily = family),
+        headlineSmall = headlineSmall.copy(fontFamily = family),
+        titleLarge = titleLarge.copy(fontFamily = family),
+        titleMedium = titleMedium.copy(fontFamily = family),
+        titleSmall = titleSmall.copy(fontFamily = family),
+        bodyLarge = bodyLarge.copy(fontFamily = family),
+        bodyMedium = bodyMedium.copy(fontFamily = family),
+        bodySmall = bodySmall.copy(fontFamily = family),
+        labelLarge = labelLarge.copy(fontFamily = family),
+        labelMedium = labelMedium.copy(fontFamily = family),
+        labelSmall = labelSmall.copy(fontFamily = family),
+    )
+}
+
 private fun TextStyle.scaled(factor: Float): TextStyle = copy(
     fontSize = if (fontSize != TextUnit.Unspecified) fontSize * factor else fontSize,
     lineHeight = if (lineHeight != TextUnit.Unspecified) lineHeight * factor else lineHeight,

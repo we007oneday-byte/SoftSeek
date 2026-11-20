@@ -7,6 +7,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.we007oneday_byte.softseek.core.asr.VoskModelManager
 import io.github.we007oneday_byte.softseek.core.asr.VoskModelState
 import io.github.we007oneday_byte.softseek.core.image.ImageProcessor
+import io.github.we007oneday_byte.softseek.core.logging.AppLog
+import io.github.we007oneday_byte.softseek.core.logging.LogModule
 import io.github.we007oneday_byte.softseek.core.network.BaseUrlValidator
 import io.github.we007oneday_byte.softseek.core.settings.AppSettings
 import io.github.we007oneday_byte.softseek.core.settings.ParameterPreset
@@ -20,6 +22,7 @@ import io.github.we007oneday_byte.softseek.domain.model.BalanceInfo
 import io.github.we007oneday_byte.softseek.domain.model.CleanupResult
 import io.github.we007oneday_byte.softseek.domain.model.MemoryPoolConfig
 import io.github.we007oneday_byte.softseek.domain.provider.AiProvider
+import io.github.we007oneday_byte.softseek.domain.provider.ProviderType
 import io.github.we007oneday_byte.softseek.domain.repository.ConversationRepository
 import io.github.we007oneday_byte.softseek.domain.repository.MemoryPoolRepository
 import io.github.we007oneday_byte.softseek.domain.repository.UsageRepository
@@ -61,6 +64,7 @@ class SettingsViewModel
         private val json: kotlinx.serialization.json.Json,
     ) : ViewModel() {
         val settings: StateFlow<AppSettings> = settingsRepository.settings
+        val capabilities get() = provider.capabilities
         val apiKeys = apiKeyStore.keySummaries
         val models: StateFlow<List<AiModelInfo>> = modelCatalog.models
         val activeKey: StateFlow<String?> = apiKeyStore.apiKey
@@ -101,7 +105,38 @@ class SettingsViewModel
         }
 
         fun addApiKey(label: String, key: String, note: String?) {
+            val firstKey = apiKeyStore.keySummaries.value.isEmpty()
             apiKeyStore.addKey(label, key, note)
+            // 第一把 Key 是 Anthropic 格式时直接切到 Messages 协议；后续 Key 不强行改协议。
+            if (firstKey && key.trim().startsWith("sk-ant-")) {
+                setProviderType(ProviderType.ANTHROPIC)
+            } else {
+                refreshBalance()
+            }
+        }
+
+        fun setProviderType(type: ProviderType) {
+            if (settings.value.providerType == type) return
+            viewModelScope.launch {
+                val current = settingsRepository.settings.value
+                val baseIsPreset = current.baseUrl.isBlank() ||
+                    current.baseUrl.trimEnd('/') == current.providerType.defaultBaseUrl.trimEnd('/')
+                val nextBaseUrl = if (baseIsPreset) type.defaultBaseUrl else current.baseUrl
+                settingsRepository.update {
+                    it.copy(
+                        providerType = type,
+                        baseUrl = nextBaseUrl,
+                        defaultModel = type.defaultModelId,
+                        manualModelIds = emptyList(),
+                    )
+                }
+                modelCatalog.resetForProvider()
+                refreshBalance()
+            }
+        }
+
+        fun updateApiKey(id: String, label: String, key: String?, note: String?) {
+            apiKeyStore.updateKey(id, label, key, note)
             refreshBalance()
         }
 
@@ -124,6 +159,7 @@ class SettingsViewModel
                 }
                 true
             }.getOrElse { error ->
+                AppLog.error(LogModule.SETTINGS, "Base URL 校验失败", error)
                 baseUrlErrorState.value = error.message ?: "Base URL 校验失败"
                 false
             }
@@ -149,6 +185,17 @@ class SettingsViewModel
             }
         }
 
+        fun ensureModel(model: AiModelInfo) {
+            modelCatalog.ensureModel(model)
+            viewModelScope.launch {
+                settingsRepository.update { current ->
+                    current.copy(
+                        manualModelIds = (current.manualModelIds + model.id).distinct().takeLast(MAX_MANUAL_MODELS),
+                    )
+                }
+            }
+        }
+
         fun refreshBalance() {
             val key = apiKeyStore.apiKey.value
             if (key.isNullOrBlank()) {
@@ -162,6 +209,7 @@ class SettingsViewModel
                         balanceState.value = BalanceUiState(balance = info)
                     }
                     .onFailure { error ->
+                        AppLog.error(LogModule.SETTINGS, "余额查询失败", error)
                         balanceState.value = BalanceUiState(error = error.message ?: "余额查询失败")
                     }
             }
@@ -316,6 +364,7 @@ class SettingsViewModel
 
         private companion object {
             const val MAX_PRESETS = 12
+            const val MAX_MANUAL_MODELS = 30
             const val DAY_MILLIS = 24L * 60 * 60 * 1000
         }
     }

@@ -1,6 +1,7 @@
 package io.github.we007oneday_byte.softseek.ui.screens.call
 
 import android.content.Context
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -11,10 +12,13 @@ import io.github.we007oneday_byte.softseek.core.asr.AsrEvent
 import io.github.we007oneday_byte.softseek.core.audio.AudioCapture
 import io.github.we007oneday_byte.softseek.core.audio.CallAudioController
 import io.github.we007oneday_byte.softseek.core.audio.CallForegroundService
+import io.github.we007oneday_byte.softseek.core.logging.AppLog
+import io.github.we007oneday_byte.softseek.core.logging.LogModule
 import io.github.we007oneday_byte.softseek.core.tts.TtsEngine
 import io.github.we007oneday_byte.softseek.core.tts.TtsEvent
 import io.github.we007oneday_byte.softseek.core.tts.TtsQueueMode
 import io.github.we007oneday_byte.softseek.core.tts.TtsTextSplitter
+import io.github.we007oneday_byte.softseek.data.model.ModelCatalog
 import io.github.we007oneday_byte.softseek.data.settings.SettingsRepository
 import io.github.we007oneday_byte.softseek.domain.auth.ApiKeyStore
 import io.github.we007oneday_byte.softseek.domain.model.ChatSendEvent
@@ -26,8 +30,10 @@ import io.github.we007oneday_byte.softseek.domain.repository.ConversationReposit
 import io.github.we007oneday_byte.softseek.domain.repository.MemoryPoolRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -63,6 +69,7 @@ data class CallUiState(
     val inputText: String = "",
     val showKeyboard: Boolean = false,
     val selfTestMode: Boolean = false,
+    val spokenSentenceIndex: Int = -1,
 )
 
 /**
@@ -81,10 +88,12 @@ class CallViewModel
         private val conversationRepository: ConversationRepository,
         private val memoryPoolRepository: MemoryPoolRepository,
         private val settingsRepository: SettingsRepository,
+        private val modelCatalog: ModelCatalog,
         private val apiKeyStore: ApiKeyStore,
     ) : ViewModel() {
         private val _uiState = MutableStateFlow(CallUiState())
         val uiState: StateFlow<CallUiState> = _uiState.asStateFlow()
+        val settings = settingsRepository.settings
 
         private val capture = AudioCapture()
         private var asrEngine: AsrEngine? = null
@@ -98,6 +107,8 @@ class CallViewModel
         private var serviceStarted = false
         private var started = false
         private var ended = false
+        private val cleanupScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        private var cleanupJob: Job? = null
         private var busy = false
 
         init {
@@ -120,7 +131,14 @@ class CallViewModel
                                 _uiState.update { it.copy(error = event.message) }
                             }
                         }
-                        is TtsEvent.Started -> Unit
+                        is TtsEvent.Started -> {
+                            val index = event.utteranceId
+                                .substringAfterLast('-')
+                                .toIntOrNull()
+                            if (index != null) {
+                                _uiState.update { it.copy(spokenSentenceIndex = index) }
+                            }
+                        }
                     }
                 }
                 .launchIn(viewModelScope)
@@ -135,9 +153,14 @@ class CallViewModel
                     val hasApiKey = !apiKeyStore.apiKey.value.isNullOrBlank()
                     _uiState.update { it.copy(selfTestMode = !hasApiKey) }
                     if (hasApiKey) {
+                        val known = modelCatalog.contains(settings.defaultModel) ||
+                            settings.manualModelIds.contains(settings.defaultModel)
+                        val fallback = modelCatalog.models.value.firstOrNull()?.id
+                        val modelId = settings.defaultModel.takeIf { known } ?: fallback ?: settings.defaultModel
+                        val model = modelCatalog.ensureModel(modelId, settings.defaultMaxOutputTokens)
                         val conversation = conversationRepository.createConversation(
                             title = callTitle(),
-                            modelName = settings.defaultModel,
+                            modelName = model.id,
                             reasoningEffort = ReasoningEffort.LOW,
                             maxOutputTokens = minOf(settings.defaultMaxOutputTokens, CALL_MAX_OUTPUT_TOKENS),
                         )
@@ -188,7 +211,8 @@ class CallViewModel
                     startAudioLoop()
                     startTimer()
                 } catch (error: Exception) {
-                    releaseCallResources()
+                    AppLog.error(LogModule.CALL, "通话初始化失败", error)
+                    releaseCallResourcesAsync()
                     _uiState.update {
                         it.copy(
                             phase = CallPhase.ERROR,
@@ -265,7 +289,6 @@ class CallViewModel
             ttsWaiter?.complete(false)
             ttsWaiter = null
             ttsEngine.stop()
-            releaseCallResources()
             _uiState.update {
                 it.copy(
                     phase = CallPhase.ENDED,
@@ -273,12 +296,34 @@ class CallViewModel
                     error = null,
                 )
             }
+            // Vosk/AudioRecord 的 stop/release 可能阻塞主线程 1～2 秒；先让 UI 返回，
+            // 再把原生资源释放放到 IO，避免挂断按钮和页面返回被拖住。
+            releaseCallResourcesAsync()
         }
 
         override fun onCleared() {
             endCall()
             ttsEngine.stop()
             super.onCleared()
+        }
+
+        private fun releaseCallResourcesAsync() {
+            // startCall 失败和用户挂断可能同时触发释放；只允许一个 IO 清理任务，
+            // 避免 AudioRecord / Vosk 被并发 stop/release 两次。
+            if (cleanupJob?.isActive == true) return
+            val startedAt = SystemClock.elapsedRealtime()
+            cleanupJob = cleanupScope.launch {
+                val result = runCatching { releaseCallResources() }
+                AppLog.metric(
+                    module = LogModule.CALL,
+                    name = "call_release_duration",
+                    value = SystemClock.elapsedRealtime() - startedAt,
+                    unit = "ms",
+                )
+                result.onFailure { error ->
+                    AppLog.error(LogModule.CALL, "通话资源释放失败", error)
+                }
+            }
         }
 
         private fun releaseCallResources() {
@@ -329,6 +374,7 @@ class CallViewModel
                             phase = CallPhase.LISTENING,
                             partialText = "",
                             error = null,
+                            spokenSentenceIndex = -1,
                         )
                     }
                     startAudioLoop()
@@ -361,6 +407,7 @@ class CallViewModel
                     error = null,
                     inputText = "",
                     showKeyboard = false,
+                    spokenSentenceIndex = -1,
                 )
             }
             sendJob = viewModelScope.launch {
@@ -398,6 +445,7 @@ class CallViewModel
                 } catch (cancelled: CancellationException) {
                     throw cancelled
                 } catch (error: Exception) {
+                    AppLog.error(LogModule.CALL, "生成通话回复失败", error)
                     _uiState.update {
                         it.copy(
                             phase = CallPhase.ERROR,
@@ -429,6 +477,7 @@ class CallViewModel
                     error = null,
                     inputText = "",
                     showKeyboard = false,
+                    spokenSentenceIndex = -1,
                 )
             }
             sendJob = viewModelScope.launch {
@@ -451,7 +500,7 @@ class CallViewModel
             if (text.isBlank() || ended) return
             val sentences = TtsTextSplitter.split(text)
             if (sentences.isEmpty()) return
-            _uiState.update { it.copy(phase = CallPhase.SPEAKING) }
+            _uiState.update { it.copy(phase = CallPhase.SPEAKING, spokenSentenceIndex = 0) }
             val baseId = "call-${System.currentTimeMillis()}"
             val ids = sentences.indices.map { index -> "$baseId-$index" }
             val waiter = CompletableDeferred<Boolean>()

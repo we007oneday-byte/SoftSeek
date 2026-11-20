@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
+import io.github.we007oneday_byte.softseek.core.logging.AppLog
 import io.github.we007oneday_byte.softseek.data.worker.PurgeScheduler
 import javax.inject.Inject
 
@@ -19,6 +20,7 @@ class ChatApp : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        AppLog.install(this, BuildConfig.VERSION_NAME)
         PurgeScheduler.schedule(this)
     }
 }

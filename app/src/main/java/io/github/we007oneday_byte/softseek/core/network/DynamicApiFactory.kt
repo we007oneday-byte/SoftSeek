@@ -1,8 +1,9 @@
 package io.github.we007oneday_byte.softseek.core.network
 
 import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
-import io.github.we007oneday_byte.softseek.data.remote.DeepSeekApi
-import io.github.we007oneday_byte.softseek.data.remote.DeepSeekStreamApi
+import io.github.we007oneday_byte.softseek.data.remote.AnthropicApi
+import io.github.we007oneday_byte.softseek.data.remote.OpenAiApi
+import io.github.we007oneday_byte.softseek.data.remote.OpenAiStreamApi
 import io.github.we007oneday_byte.softseek.data.settings.SettingsRepository
 import kotlinx.serialization.json.Json
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -38,19 +39,27 @@ class DynamicApiFactory
         private var cachedConfig: NetworkConfig? = null
 
         @Volatile
-        private var cachedApi: DeepSeekApi? = null
+        private var cachedApi: OpenAiApi? = null
 
         @Volatile
-        private var cachedStreamApi: DeepSeekStreamApi? = null
+        private var cachedStreamApi: OpenAiStreamApi? = null
 
-        fun api(): DeepSeekApi {
+        @Volatile
+        private var cachedAnthropicApi: AnthropicApi? = null
+
+        fun api(): OpenAiApi {
             ensure()
             return checkNotNull(cachedApi)
         }
 
-        fun streamApi(): DeepSeekStreamApi {
+        fun streamApi(): OpenAiStreamApi {
             ensure()
             return checkNotNull(cachedStreamApi)
+        }
+
+        fun anthropicApi(): AnthropicApi {
+            ensure()
+            return checkNotNull(cachedAnthropicApi)
         }
 
         @Synchronized
@@ -63,7 +72,11 @@ class DynamicApiFactory
                 read = settings.readTimeoutSeconds,
                 write = settings.writeTimeoutSeconds,
             )
-            if (config == cachedConfig && cachedApi != null && cachedStreamApi != null) return
+            if (config == cachedConfig && cachedApi != null && cachedStreamApi != null &&
+                cachedAnthropicApi != null
+            ) {
+                return
+            }
             val proxy = parseProxy(config.proxyUrl)
             val client = OkHttpClient.Builder()
                 .connectTimeout(config.connect.toLong(), TimeUnit.SECONDS)
@@ -74,8 +87,9 @@ class DynamicApiFactory
             val streamClient = client.newBuilder()
                 .readTimeout(0, TimeUnit.MILLISECONDS)
                 .build()
-            cachedApi = retrofit(client).create(DeepSeekApi::class.java)
-            cachedStreamApi = retrofit(streamClient).create(DeepSeekStreamApi::class.java)
+            cachedApi = retrofit(client).create(OpenAiApi::class.java)
+            cachedStreamApi = retrofit(streamClient).create(OpenAiStreamApi::class.java)
+            cachedAnthropicApi = retrofit(streamClient).create(AnthropicApi::class.java)
             cachedConfig = config
         }
 

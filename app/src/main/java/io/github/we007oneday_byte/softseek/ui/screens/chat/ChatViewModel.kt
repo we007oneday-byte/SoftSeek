@@ -5,6 +5,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import io.github.we007oneday_byte.softseek.core.image.ImageProcessor
+import io.github.we007oneday_byte.softseek.core.logging.AppLog
+import io.github.we007oneday_byte.softseek.core.logging.LogModule
 import io.github.we007oneday_byte.softseek.data.model.ModelCatalog
 import io.github.we007oneday_byte.softseek.data.settings.SettingsRepository
 import io.github.we007oneday_byte.softseek.domain.auth.ApiKeyStore
@@ -113,6 +115,20 @@ class ChatViewModel
             apiKeyStore.apiKey
                 .onEach { key -> _uiState.update { it.copy(apiKeyConfigured = !key.isNullOrBlank()) } }
                 .launchIn(viewModelScope)
+
+            settingsRepository.settings
+                .onEach { settings ->
+                    settings.manualModelIds.forEach { modelCatalog.ensureModel(it) }
+                }
+                .launchIn(viewModelScope)
+
+            viewModelScope.launch {
+                val key = apiKeyStore.apiKey.value
+                if (!key.isNullOrBlank()) {
+                    modelCatalog.refresh(key)
+                    reconcileModels()
+                }
+            }
         }
 
         fun onInputChange(value: String) {
@@ -140,6 +156,7 @@ class ChatViewModel
                         }
                     }
                     .onFailure { error ->
+                        AppLog.error(LogModule.CHAT, "图片处理失败", error)
                         _uiState.update {
                             it.copy(
                                 isProcessingImages = false,
@@ -159,17 +176,50 @@ class ChatViewModel
         fun refreshModels() {
             viewModelScope.launch {
                 val key = apiKeyStore.apiKey.value
-                modelCatalog.refresh(key)
+                if (key.isNullOrBlank()) return@launch
+                val result = modelCatalog.refresh(key)
+                if (result.isSuccess) reconcileModels()
             }
         }
 
+        /**
+         * 远程模型目录变化后，把已保存的默认模型和当前会话模型迁移到实际可用的模型，
+         * 避免切换服务商后旧会话仍请求旧模型而返回 Model Not exist。
+         */
+        private suspend fun reconcileModels() {
+            val models = modelCatalog.models.value
+            if (models.isEmpty()) return
+            val settings = settingsRepository.settings.value
+            val fallback = models.first().id
+            if (!isKnownModel(settings.defaultModel)) {
+                settingsRepository.update { it.copy(defaultModel = fallback) }
+            }
+            val active = _uiState.value.activeConversation ?: return
+            if (!isKnownModel(active.modelName)) {
+                conversationRepository.updateConfig(
+                    active.id,
+                    fallback,
+                    active.reasoningEffort,
+                    active.maxOutputTokens,
+                )
+            }
+        }
+
+        private fun isKnownModel(id: String): Boolean =
+            modelCatalog.contains(id) || settingsRepository.settings.value.manualModelIds.contains(id)
+
         fun updateConversationConfig(
-            modelId: String,
+            model: AiModelInfo,
             effort: ReasoningEffort,
             maxOutputTokens: Int,
         ) {
-            val model = modelCatalog.model(modelId)
-            val max = maxOutputTokens.coerceIn(MIN_OUTPUT_TOKENS, model?.maxOutputTokens ?: MAX_OUTPUT_TOKENS)
+            val modelId = model.id
+            val wasKnown = isKnownModel(modelId)
+            val resolved = modelCatalog.ensureModel(model)
+            val max = maxOutputTokens.coerceIn(
+                MIN_OUTPUT_TOKENS,
+                resolved.maxOutputTokens.takeIf { it > 0 } ?: MAX_OUTPUT_TOKENS,
+            )
             val active = _uiState.value.activeConversation
             if (active == null) {
                 viewModelScope.launch {
@@ -178,17 +228,31 @@ class ChatViewModel
                             defaultModel = modelId,
                             defaultReasoningEffort = effort,
                             defaultMaxOutputTokens = max,
+                            manualModelIds = if (wasKnown) {
+                                it.manualModelIds
+                            } else {
+                                (it.manualModelIds + modelId).distinct().takeLast(MAX_MANUAL_MODELS)
+                            },
                         )
                     }
                 }
             } else {
                 viewModelScope.launch {
                     conversationRepository.updateConfig(active.id, modelId, effort, max)
+                    if (!wasKnown) {
+                        settingsRepository.update {
+                            it.copy(
+                                manualModelIds = (it.manualModelIds + modelId)
+                                    .distinct()
+                                    .takeLast(MAX_MANUAL_MODELS),
+                            )
+                        }
+                    }
                 }
             }
             _uiState.update {
                 it.copy(
-                    currentModelInfo = model,
+                    currentModelInfo = resolved,
                     visionEnabled = modelCatalog.supportsVision(modelId),
                     activeConversation = it.activeConversation?.copy(
                         modelName = modelId,
@@ -204,7 +268,7 @@ class ChatViewModel
             val images = _uiState.value.pendingImages
             if ((text.isEmpty() && images.isEmpty()) || _uiState.value.isStreaming) return
             if (images.isNotEmpty() && !_uiState.value.visionEnabled) {
-                _uiState.update { it.copy(errorMessage = "当前模型不支持图片输入，请切换到 deepseek-flash") }
+                _uiState.update { it.copy(errorMessage = "当前模型不支持图片输入，请切换支持图片的模型") }
                 return
             }
             generation += 1
@@ -223,6 +287,7 @@ class ChatViewModel
             sendJob = viewModelScope.launch {
                 val conversationId = activeId.value ?: createConversation(text.ifBlank { "图片对话" })
                 if (conversationId == null || runGeneration != generation) return@launch
+                ensureConversationModel(conversationId)
                 collectSend(chatRepository.sendMessage(conversationId, text, attached), runGeneration)
             }
         }
@@ -241,6 +306,7 @@ class ChatViewModel
                 )
             }
             sendJob = viewModelScope.launch {
+                ensureConversationModel(conversationId)
                 collectSend(chatRepository.regenerate(conversationId), runGeneration)
             }
         }
@@ -339,17 +405,43 @@ class ChatViewModel
                     conversationRepository.softDeleteMessage(later.id)
                 }
                 if (runGeneration != generation) return@launch
+                ensureConversationModel(conversationId)
                 collectSend(chatRepository.regenerate(conversationId), runGeneration)
             }
+        }
+
+        /**
+         * 发送、重新生成、编辑重生成前统一检查会话模型；旧版本保存的模型或切换服务商后
+         * 已失效的模型会迁移到当前默认/首个可用模型，避免服务端返回 Model Not exist。
+         * 用户手动填写并持久化的模型 ID 不会被迁移。
+         */
+        private suspend fun ensureConversationModel(conversationId: String) {
+            val conversation = conversationRepository.getConversation(conversationId) ?: return
+            if (isKnownModel(conversation.modelName)) return
+            val fallback = settingsRepository.settings.value.defaultModel
+                .takeIf { isKnownModel(it) }
+                ?: modelCatalog.models.value.firstOrNull()?.id
+                ?: return
+            conversationRepository.updateConfig(
+                conversationId,
+                fallback,
+                conversation.reasoningEffort,
+                conversation.maxOutputTokens,
+            )
         }
 
         private suspend fun createConversation(firstMessage: String): String? {
             val title = firstMessage.lineSequence().firstOrNull()?.trim()?.take(MAX_TITLE_LENGTH)
             if (title.isNullOrBlank()) return null
             val settings = settingsRepository.settings.value
+            val fallback = modelCatalog.models.value.firstOrNull()?.id
+            val modelId = settings.defaultModel.takeIf { isKnownModel(it) }
+                ?: fallback
+                ?: settings.defaultModel
+            val model = modelCatalog.ensureModel(modelId, settings.defaultMaxOutputTokens)
             val conversation = conversationRepository.createConversation(
                 title = title,
-                modelName = settings.defaultModel,
+                modelName = model.id,
                 reasoningEffort = settings.defaultReasoningEffort,
                 maxOutputTokens = settings.defaultMaxOutputTokens,
             )
@@ -422,6 +514,13 @@ class ChatViewModel
                         }
                         is ChatSendEvent.Failed -> {
                             val error = event.error.userMessage()
+                            AppLog.error(
+                                module = LogModule.CHAT,
+                                message = "聊天请求失败: $error",
+                                metric = "request_fail",
+                                value = 1,
+                                unit = "次",
+                            )
                             _uiState.update { state ->
                                 val messages = if (event.assistantMessage != null) {
                                     state.messages.replace(event.assistantMessage)
@@ -446,6 +545,7 @@ class ChatViewModel
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (error: Exception) {
+                AppLog.error(LogModule.CHAT, "发送消息异常", error)
                 if (runGeneration == generation) {
                     _uiState.update {
                         it.copy(
@@ -469,5 +569,6 @@ class ChatViewModel
             const val MIN_OUTPUT_TOKENS = 256
             const val MAX_OUTPUT_TOKENS = 393_216
             const val MAX_IMAGES = 8
+            const val MAX_MANUAL_MODELS = 30
         }
     }

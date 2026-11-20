@@ -4,6 +4,7 @@ import io.github.we007oneday_byte.softseek.core.constant.AppConstants
 import io.github.we007oneday_byte.softseek.domain.model.ImageDetail
 import io.github.we007oneday_byte.softseek.domain.model.MemoryPoolConfig
 import io.github.we007oneday_byte.softseek.domain.model.ReasoningEffort
+import io.github.we007oneday_byte.softseek.domain.provider.ProviderType
 import kotlinx.serialization.Serializable
 
 enum class AppThemeMode {
@@ -30,6 +31,8 @@ data class ParameterPreset(
 @Serializable
 data class AppSettings(
     val themeMode: AppThemeMode = AppThemeMode.SYSTEM,
+    val visualStyle: VisualStyle = VisualStyle.Minimal,
+    val voiceAnimationStyle: VoiceAnimationStyle = VoiceAnimationStyle.WAVE,
     val dynamicColor: Boolean = false,
     val fontScale: Float = 1.0f,
     val bubbleRadiusDp: Int = 16,
@@ -37,6 +40,8 @@ data class AppSettings(
     val streamingEnabled: Boolean = true,
     val markdownEnabled: Boolean = true,
     val defaultModel: String = AppConstants.DEFAULT_MODEL,
+    /** 用户手动填写过的模型 ID，用于 /models 不可用或未返回该模型时仍视为有效。 */
+    val manualModelIds: List<String> = emptyList(),
     val defaultReasoningEffort: ReasoningEffort = ReasoningEffort.HIGH,
     val defaultMaxInputTokens: Int = MemoryPoolConfig.DEFAULT_MAX_INPUT_TOKENS,
     val defaultMaxOutputTokens: Int = 8192,
@@ -46,6 +51,7 @@ data class AppSettings(
     val cleanupProtectionHours: Int = MemoryPoolConfig.DEFAULT_CLEANUP_PROTECTION_HOURS,
     val deletedRetentionDays: Int = MemoryPoolConfig.DEFAULT_DELETED_RETENTION_DAYS,
     val imageDetail: ImageDetail = ImageDetail.AUTO,
+    val providerType: ProviderType = ProviderType.OPENAI_COMPATIBLE,
     val baseUrl: String = AppConstants.DEFAULT_BASE_URL,
     val proxyUrl: String = "",
     val connectTimeoutSeconds: Int = 15,

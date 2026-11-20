@@ -15,7 +15,6 @@ import android.provider.Settings
 import android.view.WindowManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,13 +23,10 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.systemBarsPadding
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material3.Button
@@ -49,8 +45,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
@@ -60,11 +54,17 @@ import androidx.core.net.toUri
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.we007oneday_byte.softseek.R
+import io.github.we007oneday_byte.softseek.ui.theme.LocalIsLowEndDevice
+import io.github.we007oneday_byte.softseek.ui.theme.LocalSoftSeekUiSettings
+import io.github.we007oneday_byte.softseek.ui.theme.StyleAwareButton
+import io.github.we007oneday_byte.softseek.ui.theme.StyleAwareCard
 
 @Composable
 fun CallScreen(onEndCall: () -> Unit) {
     val viewModel: CallViewModel = hiltViewModel()
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val uiSettings = LocalSoftSeekUiSettings.current
     val context = LocalContext.current
     var permissionDenied by remember { mutableStateOf(false) }
     val notificationLauncher = rememberLauncherForActivityResult(
@@ -107,111 +107,156 @@ fun CallScreen(onEndCall: () -> Unit) {
     ProximityEffect()
 
     Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(Color(0xFF1B1733), Color(0xFF0E0E14)),
-                ),
-            ),
+        modifier = Modifier.fillMaxSize(),
     ) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .systemBarsPadding()
-                .padding(24.dp),
+                .padding(horizontal = 24.dp, vertical = 20.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Text(
-                text = stringResource(R.string.call_title),
-                style = MaterialTheme.typography.headlineLarge,
-                color = Color.White,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = formatDuration(state.durationSeconds),
-                style = MaterialTheme.typography.bodyLarge,
-                color = Color.White.copy(alpha = 0.7f),
-            )
-            Spacer(Modifier.height(32.dp))
-            Text(
-                text = when (state.phase) {
-                    CallPhase.DIALING -> "正在准备离线模型与麦克风…"
-                    CallPhase.LISTENING -> if (state.muted) {
-                        "已静音"
-                    } else if (state.selfTestMode) {
-                        "正在聆听 · 本地自检"
-                    } else {
-                        "正在聆听…"
-                    }
-                    CallPhase.THINKING -> "思考中…"
-                    CallPhase.SPEAKING -> "正在回答…"
-                    CallPhase.ENDED -> "通话已结束"
-                    CallPhase.ERROR -> "通话异常"
-                },
-                style = MaterialTheme.typography.titleMedium,
-                color = Color.White.copy(alpha = 0.9f),
-                textAlign = TextAlign.Center,
-            )
-            if (state.selfTestMode) {
-                Spacer(Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column {
+                    Text(
+                        text = "AI 通话",
+                        style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onBackground,
+                    )
+                    Text(
+                        text = formatDuration(state.durationSeconds),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
                 Text(
-                    text = "本地自检模式 · 未配置 API Key\n说一句话，将用固定提示验证麦克风、离线识别和 TTS。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFFFD180),
-                    textAlign = TextAlign.Center,
+                    text = when (state.phase) {
+                        CallPhase.DIALING -> "准备中"
+                        CallPhase.LISTENING -> "聆听"
+                        CallPhase.THINKING -> "思考"
+                        CallPhase.SPEAKING -> "回答"
+                        CallPhase.ENDED -> "已结束"
+                        CallPhase.ERROR -> "异常"
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
             Spacer(Modifier.height(20.dp))
-            if (state.partialText.isNotBlank()) {
-                Text(
-                    text = "“${state.partialText}”",
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = Color(0xFFB9A7FF),
-                    textAlign = TextAlign.Center,
+            StyleAwareCard(
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                )
-                Spacer(Modifier.height(16.dp))
-            }
-            if (state.lastUserText.isNotBlank()) {
-                LabeledText(label = "你说", text = state.lastUserText)
-                Spacer(Modifier.height(12.dp))
-            }
-            if (state.assistantText.isNotBlank()) {
-                LabeledText(label = "SOFTSEEK", text = state.assistantText)
-            }
-            state.error?.let {
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFFF8A80),
-                    textAlign = TextAlign.Center,
-                )
-            }
-            if (permissionDenied) {
-                Spacer(Modifier.height(12.dp))
-                Text(
-                    text = "需要麦克风权限才能通话；授权后才能启动离线识别。",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFFFF8A80),
-                    textAlign = TextAlign.Center,
-                )
-                TextButton(
-                    onClick = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                    horizontalAlignment = Alignment.CenterHorizontally,
                 ) {
-                    Text("重新授权麦克风")
-                }
-                TextButton(
-                    onClick = {
-                        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                            data = "package:${context.packageName}".toUri()
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    VoiceVisualizerCanvas(
+                        volume = if (state.phase == CallPhase.LISTENING && !state.muted) 0.72f else 0.16f,
+                        style = settings.voiceAnimationStyle,
+                        isLowEndDevice = LocalIsLowEndDevice.current,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = when (state.phase) {
+                            CallPhase.DIALING -> "正在准备离线模型与麦克风…"
+                            CallPhase.LISTENING -> if (state.muted) {
+                                "已静音"
+                            } else if (state.selfTestMode) {
+                                "正在聆听 · 本地自检"
+                            } else {
+                                "正在聆听…"
+                            }
+                            CallPhase.THINKING -> "思考中…"
+                            CallPhase.SPEAKING -> "正在回答…"
+                            CallPhase.ENDED -> "通话已结束"
+                            CallPhase.ERROR -> "通话异常"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        textAlign = TextAlign.Center,
+                    )
+                    if (state.selfTestMode) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = "本地自检模式 · 未配置 API Key\n说一句话，将用固定提示验证麦克风、离线识别和 TTS。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                    Spacer(Modifier.height(12.dp))
+                    PartialTranscript(
+                        text = state.partialText,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (state.lastUserText.isNotBlank()) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = "你说 · ${state.lastUserText}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 3,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    if (state.assistantText.isNotBlank()) {
+                        Spacer(Modifier.height(12.dp))
+                        StyleAwareCard(
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column {
+                                Text(
+                                    text = "SOFTSEEK",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                Spacer(Modifier.height(4.dp))
+                                StreamingAssistantText(
+                                    text = state.assistantText,
+                                    spokenSentenceIndex = state.spokenSentenceIndex,
+                                    messageKey = state.lastUserText,
+                                )
+                            }
                         }
-                        context.startActivity(intent)
-                    },
-                ) {
-                    Text("打开系统设置")
+                    }
+                    state.error?.let {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = TextAlign.Center,
+                        )
+                    }
+                    if (permissionDenied) {
+                        Spacer(Modifier.height(12.dp))
+                        Text(
+                            text = "需要麦克风权限才能通话；授权后才能启动离线识别。",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = TextAlign.Center,
+                        )
+                        TextButton(
+                            onClick = { permissionLauncher.launch(Manifest.permission.RECORD_AUDIO) },
+                        ) {
+                            Text("重新授权麦克风")
+                        }
+                        TextButton(
+                            onClick = {
+                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                    data = "package:${context.packageName}".toUri()
+                                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(intent)
+                            },
+                        ) {
+                            Text("打开系统设置")
+                        }
+                    }
                 }
             }
 
@@ -253,38 +298,29 @@ fun CallScreen(onEndCall: () -> Unit) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Button(
+                StyleAwareButton(
                     onClick = viewModel::toggleMute,
                     modifier = Modifier.weight(1f),
                     enabled = state.phase != CallPhase.ENDED && state.phase != CallPhase.ERROR,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White.copy(alpha = 0.14f),
-                        contentColor = Color.White,
-                    ),
+                    primary = false,
                 ) {
                     Text(if (state.muted) "取消静音" else "静音")
                 }
-                Button(
+                StyleAwareButton(
                     onClick = viewModel::toggleSpeaker,
                     modifier = Modifier.weight(1f),
                     enabled = state.phase != CallPhase.ENDED && state.phase != CallPhase.ERROR,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White.copy(alpha = 0.14f),
-                        contentColor = Color.White,
-                    ),
+                    primary = false,
                 ) {
                     Text(if (state.speakerOn) "听筒" else "免提")
                 }
-                Button(
+                StyleAwareButton(
                     onClick = viewModel::toggleKeyboard,
                     modifier = Modifier.weight(1f),
                     enabled = state.phase != CallPhase.DIALING &&
                         state.phase != CallPhase.ENDED &&
                         state.phase != CallPhase.ERROR,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color.White.copy(alpha = 0.14f),
-                        contentColor = Color.White,
-                    ),
+                    primary = false,
                 ) {
                     Text("键盘")
                 }
@@ -296,14 +332,13 @@ fun CallScreen(onEndCall: () -> Unit) {
                     modifier = Modifier.size(64.dp),
                     shape = CircleShape,
                     colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFFD32F2F),
-                        contentColor = Color.White,
+                        containerColor = MaterialTheme.colorScheme.error,
+                        contentColor = MaterialTheme.colorScheme.onError,
                     ),
                 ) {
                     Icon(
                         imageVector = Icons.Outlined.Phone,
                         contentDescription = stringResource(R.string.end_call),
-                        tint = Color.White,
                     )
                 }
             }
@@ -311,7 +346,7 @@ fun CallScreen(onEndCall: () -> Unit) {
             Text(
                 text = stringResource(R.string.end_call),
                 style = MaterialTheme.typography.bodySmall,
-                color = Color.White.copy(alpha = 0.7f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
@@ -368,30 +403,6 @@ private fun Context.findActivity(): Activity? = when (this) {
     is Activity -> this
     is ContextWrapper -> baseContext.findActivity()
     else -> null
-}
-
-@Composable
-private fun LabeledText(
-    label: String,
-    text: String,
-) {
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(max = 220.dp)
-            .verticalScroll(rememberScrollState()),
-    ) {
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelMedium,
-            color = Color.White.copy(alpha = 0.5f),
-        )
-        Text(
-            text = text,
-            style = MaterialTheme.typography.bodyLarge,
-            color = Color.White,
-        )
-    }
 }
 
 private fun formatDuration(seconds: Int): String {

@@ -146,6 +146,10 @@ private class FakeApiKeyStore(initial: String?) : ApiKeyStore {
 
     override fun activateKey(id: String) = Unit
 
+    override fun updateKey(id: String, label: String, key: String?, note: String?) {
+        if (!key.isNullOrBlank()) state.value = key
+    }
+
     override fun deleteKey(id: String) {
         state.value = null
     }

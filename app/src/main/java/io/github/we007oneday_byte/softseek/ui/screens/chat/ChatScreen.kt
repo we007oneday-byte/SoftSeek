@@ -9,6 +9,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -33,9 +34,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Send
 import androidx.compose.material.icons.outlined.Add
@@ -49,14 +52,11 @@ import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Star
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
-import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledIconButton
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -86,6 +86,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.ImeAction
@@ -109,6 +110,9 @@ import io.github.we007oneday_byte.softseek.domain.model.ReasoningEffort
 import io.github.we007oneday_byte.softseek.ui.components.common.MarkdownText
 import io.github.we007oneday_byte.softseek.ui.components.common.SettingItem
 import io.github.we007oneday_byte.softseek.ui.theme.LocalSoftSeekUiSettings
+import io.github.we007oneday_byte.softseek.ui.theme.SoftSeekButton
+import io.github.we007oneday_byte.softseek.ui.theme.SoftSeekIconButton
+import io.github.we007oneday_byte.softseek.ui.theme.StyleAwareBubble
 import io.github.we007oneday_byte.softseek.ui.theme.softSeekColors
 import kotlinx.coroutines.launch
 import java.io.File
@@ -175,6 +179,7 @@ fun ChatScreen(
         },
     ) {
         Scaffold(
+            containerColor = Color.Transparent,
             topBar = {
                 TopAppBar(
                     title = {
@@ -348,7 +353,7 @@ fun ChatScreen(
             onRefresh = viewModel::refreshModels,
             onDismiss = { showModelDialog = false },
             onApply = { model, effort, maxTokens ->
-                viewModel.updateConversationConfig(model.id, effort, maxTokens)
+                viewModel.updateConversationConfig(model, effort, maxTokens)
                 showModelDialog = false
             },
         )
@@ -380,12 +385,11 @@ private fun ConversationDrawer(
                 style = MaterialTheme.typography.headlineLarge,
             )
             Spacer(Modifier.height(16.dp))
-            Button(
+            SoftSeekButton(
                 onClick = onNewChat,
                 modifier = Modifier
                     .fillMaxWidth()
                     .heightIn(min = 48.dp),
-                shape = RoundedCornerShape(16.dp),
             ) {
                 Icon(imageVector = Icons.Outlined.Add, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
@@ -451,6 +455,11 @@ private fun ConversationRow(
             MaterialTheme.colorScheme.primaryContainer
         } else {
             Color.Transparent
+        },
+        contentColor = if (selected) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurface
         },
         shape = RoundedCornerShape(12.dp),
     ) {
@@ -605,7 +614,6 @@ private fun MessageBubble(
     val content = streamingContent.ifBlank { message.content }
     val reasoning = streamingReasoning.ifBlank { message.reasoningContent.orEmpty() }
     val imageAttachments = message.attachments.filter { it.type == AttachmentType.IMAGE }
-    val bubbleRadius = LocalSoftSeekUiSettings.current.bubbleRadiusDp.dp
     val finishWarning = if (isUser || isStreaming) {
         null
     } else {
@@ -621,25 +629,16 @@ private fun MessageBubble(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start,
         ) {
-            Surface(
+            StyleAwareBubble(
+                isMine = isUser,
                 modifier = Modifier
                     .widthIn(max = 360.dp)
                     .combinedClickable(
                         onClick = {},
                         onLongClick = { menuOpen = true },
                     ),
-                color = if (isUser) {
-                    MaterialTheme.colorScheme.primary
-                } else {
-                    MaterialTheme.softSeekColors.aiBubble
-                },
-                shape = if (isUser) {
-                    RoundedCornerShape(bubbleRadius, bubbleRadius, 4.dp, bubbleRadius)
-                } else {
-                    RoundedCornerShape(bubbleRadius, bubbleRadius, bubbleRadius, 4.dp)
-                },
             ) {
-                Column(modifier = Modifier.padding(12.dp)) {
+                Column {
                     if (imageAttachments.isNotEmpty()) {
                         LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                             items(imageAttachments, key = { it.attachmentId }) { attachment ->
@@ -685,7 +684,7 @@ private fun MessageBubble(
                         Text(
                             text = content,
                             style = MaterialTheme.typography.bodyLarge,
-                            color = Color.White,
+                            color = MaterialTheme.colorScheme.onPrimary,
                         )
                     } else {
                         MarkdownText(text = content)
@@ -729,7 +728,7 @@ private fun MessageBubble(
                             ),
                             style = MaterialTheme.typography.labelSmall,
                             color = if (isUser) {
-                                Color.White.copy(alpha = 0.75f)
+                                MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.75f)
                             } else {
                                 MaterialTheme.softSeekColors.textSecondary
                             },
@@ -794,6 +793,7 @@ private fun ThinkingBlock(
     var expanded by remember(streaming) { mutableStateOf(streaming) }
     Surface(
         color = MaterialTheme.softSeekColors.thinkingBackground,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         shape = RoundedCornerShape(8.dp),
     ) {
         Column(
@@ -847,6 +847,7 @@ private fun ChatInputBar(
     onStop: () -> Unit,
     onOpenSettings: () -> Unit,
 ) {
+    val inputRadius = LocalSoftSeekUiSettings.current.bubbleRadiusDp.dp
     Surface(
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 3.dp,
@@ -933,7 +934,7 @@ private fun ChatInputBar(
                     modifier = Modifier.weight(1f),
                     placeholder = { Text(stringResource(R.string.input_hint)) },
                     maxLines = 6,
-                    shape = RoundedCornerShape(20.dp),
+                    shape = RoundedCornerShape(inputRadius),
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Send),
                     keyboardActions = KeyboardActions(
                         onSend = {
@@ -943,14 +944,17 @@ private fun ChatInputBar(
                 )
                 Spacer(Modifier.width(8.dp))
                 if (isStreaming) {
-                    FilledTonalIconButton(onClick = onStop) {
+                    SoftSeekIconButton(
+                        onClick = onStop,
+                        primary = false,
+                    ) {
                         Icon(
                             imageVector = Icons.Outlined.Close,
                             contentDescription = stringResource(R.string.chat_stop),
                         )
                     }
                 } else {
-                    FilledIconButton(
+                    SoftSeekIconButton(
                         onClick = onSend,
                         enabled = value.isNotBlank() || pendingImages.isNotEmpty(),
                     ) {
@@ -977,10 +981,13 @@ private fun EmptyChatState(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(
-            text = stringResource(R.string.app_name),
-            style = MaterialTheme.typography.headlineLarge,
-            color = MaterialTheme.colorScheme.primary,
+        Image(
+            painter = painterResource(R.drawable.softseek_logo_mark),
+            contentDescription = stringResource(R.string.app_name),
+            modifier = Modifier
+                .height(72.dp)
+                .widthIn(max = 220.dp),
+            contentScale = ContentScale.Fit,
         )
         Spacer(Modifier.height(8.dp))
         Text(
@@ -1120,38 +1127,47 @@ private fun ModelSettingsDialog(
     onApply: (AiModelInfo, ReasoningEffort, Int) -> Unit,
 ) {
     val available = models.ifEmpty { listOfNotNull(currentModel) }
-    if (available.isEmpty()) return
     var selected by remember(currentModel?.id) {
-        mutableStateOf(available.firstOrNull { it.id == currentModel?.id } ?: available.first())
+        mutableStateOf(available.firstOrNull { it.id == currentModel?.id })
     }
     var effort by remember(currentEffort) { mutableStateOf(currentEffort) }
     var maxTokens by remember(currentMaxTokens) { mutableStateOf(currentMaxTokens.toString()) }
+    var manualModelId by remember(currentModel?.id) { mutableStateOf("") }
     LaunchedEffect(Unit) { onRefresh() }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.chat_model_title)) },
         text = {
-            Column(modifier = Modifier.heightIn(max = 430.dp)) {
-                available.forEach { model ->
-                    FilterChip(
-                        selected = model.id == selected.id,
-                        onClick = { selected = model },
-                        label = {
-                            Text(
-                                "${model.displayName} · ${if (model.inputModalities.contains(
-                                        "image",
-                                    )
-                                ) {
-                                    "图片+文本"
-                                } else {
-                                    "纯文本"
-                                }}",
-                            )
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 2.dp),
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 430.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                if (available.isEmpty()) {
+                    Text(
+                        text = "模型列表为空。可在下方手动填写 OpenAI 兼容模型 ID。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.softSeekColors.textSecondary,
                     )
+                } else {
+                    available.forEach { model ->
+                        FilterChip(
+                            selected = model.id == selected?.id,
+                            onClick = { selected = model },
+                            label = {
+                                Text(
+                                    "${model.displayName} · ${if (model.inputModalities.contains("image")) {
+                                        "图片+文本"
+                                    } else {
+                                        "纯文本"
+                                    }}",
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 2.dp),
+                        )
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
                 Text(
@@ -1160,9 +1176,10 @@ private fun ModelSettingsDialog(
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     ReasoningEffort.entries.forEach { level ->
-                        val supported = selected.reasoningLevels.isEmpty() ||
+                        val supported = selected == null ||
+                            selected?.reasoningLevels?.isEmpty() == true ||
                             level == ReasoningEffort.NONE ||
-                            selected.reasoningLevels.contains(level)
+                            selected?.reasoningLevels?.contains(level) == true
                         if (supported) {
                             FilterChip(
                                 selected = effort == level,
@@ -1174,13 +1191,22 @@ private fun ModelSettingsDialog(
                 }
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
+                    value = manualModelId,
+                    onValueChange = { manualModelId = it.trim() },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("手动模型 ID（可选）") },
+                    placeholder = { Text("例如 gpt-4o、deepseek-chat") },
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
                     value = maxTokens,
                     onValueChange = { maxTokens = it.filter(Char::isDigit).take(6) },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     label = { Text(stringResource(R.string.settings_max_output)) },
                     supportingText = {
-                        Text("$MIN_OUTPUT_TOKENS - ${selected.maxOutputTokens.takeIf { it > 0 } ?: 393216}")
+                        Text("$MIN_OUTPUT_TOKENS - ${selected?.maxOutputTokens?.takeIf { it > 0 } ?: 393216}")
                     },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 )
@@ -1189,9 +1215,25 @@ private fun ModelSettingsDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    val tokens = maxTokens.toIntOrNull() ?: currentMaxTokens
-                    val upper = selected.maxOutputTokens.takeIf { it > 0 } ?: 393216
-                    onApply(selected, effort, tokens.coerceIn(MIN_OUTPUT_TOKENS, upper))
+                    val manual = manualModelId.trim()
+                    val model = if (manual.isNotBlank()) {
+                        AiModelInfo(
+                            id = manual,
+                            displayName = manual,
+                            contextWindow = 0,
+                            maxOutputTokens = 393_216,
+                            inputModalities = listOf("text", "image"),
+                            reasoningLevels = emptyList(),
+                            defaultReasoningEffort = null,
+                        )
+                    } else {
+                        selected
+                    }
+                    if (model != null) {
+                        val tokens = maxTokens.toIntOrNull() ?: currentMaxTokens
+                        val upper = model.maxOutputTokens.takeIf { it > 0 } ?: 393216
+                        onApply(model, effort, tokens.coerceIn(MIN_OUTPUT_TOKENS, upper))
+                    }
                 },
             ) {
                 Text(stringResource(R.string.chat_confirm))

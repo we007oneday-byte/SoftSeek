@@ -12,7 +12,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-class DeepSeekDtoTest {
+class OpenAiDtoTest {
     private val json = Json {
         ignoreUnknownKeys = true
         explicitNulls = false

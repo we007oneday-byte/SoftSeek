@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">SOFTSEEK</string>
-    <string name="app_subtitle">非官方 DeepSeek 客户端</string>
+    <string name="app_subtitle">多协议 AI API 客户端</string>
     <string name="chat_title">SOFTSEEK</string>
     <string name="new_chat">新建对话</string>
     <string name="conversations">会话</string>
@@ -14,7 +14,7 @@
     <string name="send">发送</string>
     <string name="attach">附件</string>
     <string name="not_configured">尚未配置 API Key</string>
-    <string name="disclaimer">本应用为第三方客户端，非 DeepSeek 官方应用。所有 AI 服务由 DeepSeek 官方提供。</string>
+    <string name="disclaimer">本应用为第三方 AI API 兼容客户端，支持 OpenAI Chat Completions 与 Anthropic Messages 协议，与任何模型服务商无隶属关系。所有 AI 服务由你配置的服务商提供。</string>
     <string name="settings_api">API 配置</string>
     <string name="settings_api_key">API 密钥管理</string>
     <string name="settings_base_url">Base URL</string>
@@ -25,12 +25,21 @@
     <string name="settings_memory">记忆存储</string>
     <string name="settings_appearance">外观设置</string>
     <string name="settings_data">数据管理</string>
+    <string name="settings_logs">运行日志</string>
     <string name="settings_about">关于</string>
+    <string name="settings_api_desc">API Key、BaseURL、代理与超时</string>
+    <string name="settings_model_desc">默认模型、思考档位、最大输出与参数预设</string>
+    <string name="settings_chat_desc">流式输出与 Markdown 渲染</string>
+    <string name="settings_call_desc">离线 ASR、收音动画与系统 TTS</string>
+    <string name="settings_memory_desc">上下文池、自动清理与回收站</string>
+    <string name="settings_appearance_desc">明暗模式、视觉风格、字号与圆角</string>
+    <string name="settings_data_desc">用量、缓存与本地存储</string>
+    <string name="settings_logs_desc">ERROR/崩溃置顶、筛选与 TXT 导出</string>
+    <string name="settings_about_desc">版本、声明与使用指南</string>
     <string name="settings_placeholder">阶段 1 占位，后续接入</string>
     <string name="guide_welcome">欢迎使用 SOFTSEEK</string>
-    <string name="guide_desc">SOFTSEEK 是一个纯 Android 原生、零服务端的第三方 DeepSeek 客户端。你需要自行准备 DeepSeek API Key。</string>
+    <string name="guide_desc">SOFTSEEK 是一个纯 Android 原生、零服务端的多协议 AI 客户端。支持 OpenAI Chat Completions 与 Anthropic Messages，填写对应的协议、Base URL、API Key 和模型 ID 即可使用。</string>
     <string name="guide_start">开始使用</string>
-    <string name="call_title">AI 通话</string>
     <string name="end_call">挂断</string>
     <string name="back">返回</string>
     <string name="settings_api_key_not_set">尚未配置</string>
@@ -59,7 +68,6 @@
     <string name="settings_recycle_bin">回收站</string>
     <string name="settings_theme">主题</string>
     <string name="settings_theme_system">跟随系统</string>
-    <string name="settings_dynamic_color">动态取色</string>
     <string name="settings_export_import">导出 / 导入</string>
     <string name="settings_local_storage">本地存储</string>
     <string name="settings_local_storage_value">仅本机，不上传</string>

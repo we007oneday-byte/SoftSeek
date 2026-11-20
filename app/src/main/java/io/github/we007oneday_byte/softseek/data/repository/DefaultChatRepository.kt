@@ -1,5 +1,7 @@
 package io.github.we007oneday_byte.softseek.data.repository
 
+import io.github.we007oneday_byte.softseek.core.logging.AppLog
+import io.github.we007oneday_byte.softseek.core.logging.LogModule
 import io.github.we007oneday_byte.softseek.domain.auth.ApiKeyStore
 import io.github.we007oneday_byte.softseek.domain.context.ContextAssembler
 import io.github.we007oneday_byte.softseek.domain.model.AiChatRequest
@@ -229,6 +231,10 @@ class DefaultChatRepository
                         },
                     )
                 }
+                AppLog.info(
+                    module = LogModule.CHAT,
+                    message = "请求模型 model=${conversation.modelName}",
+                )
                 provider.streamChat(
                     apiKey = apiKey,
                     request = AiChatRequest(

@@ -4,8 +4,8 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import io.github.we007oneday_byte.softseek.data.remote.provider.DeepSeekProvider
 import io.github.we007oneday_byte.softseek.domain.provider.AiProvider
+import io.github.we007oneday_byte.softseek.domain.provider.RoutingAiProvider
 import javax.inject.Singleton
 
 @Module
@@ -13,5 +13,5 @@ import javax.inject.Singleton
 abstract class ProviderModule {
     @Binds
     @Singleton
-    abstract fun bindAiProvider(provider: DeepSeekProvider): AiProvider
+    abstract fun bindAiProvider(provider: RoutingAiProvider): AiProvider
 }

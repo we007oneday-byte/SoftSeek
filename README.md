@@ -1,10 +1,20 @@
 # SOFTSEEK
 
-SOFTSEEK（SK）是一个纯 Android 原生、Kotlin + Jetpack Compose 的 DeepSeek 第三方 API 客户端。
+SOFTSEEK（SK）是一个纯 Android 原生、Kotlin + Jetpack Compose 的多协议 AI 客户端，支持 OpenAI Chat Completions 与 Anthropic Messages 协议。
 
-> 本项目为第三方客户端，非 DeepSeek 官方应用。所有 AI 服务由 DeepSeek 官方提供，应用本身不提供任何代理、中转或收费服务。
+> 本项目为第三方客户端，与任何模型服务商无隶属关系。所有 AI 服务由你自行配置的服务商提供，应用本身不提供任何代理、中转或收费服务。
 
 ## 当前状态
+
+**ZL-01 增量：配置、协议与模型底座（批次 B，进行中）**
+
+- 新增 `ProviderType`：OpenAI 兼容 / Anthropic Messages；设置页“接口协议”可切换
+- 切换协议自动使用对应默认 Base URL 与内置模型；自定义 Base URL 会保留
+- Anthropic Messages：`POST /v1/messages`、`x-api-key` + `anthropic-version`、system/messages 请求结构、`message_start` / `content_block_delta` / `message_delta` / `message_stop` SSE 解析
+- Anthropic 支持文本、思考流、图片 base64 与 usage（输入/输出/cache）；不支持 `/models`，使用内置 Claude 预设 + 手动模型 ID
+- 首把 `sk-ant-` Key 自动识别并切换到 Anthropic；其他 Key 不强行改协议
+- 协议切换后重置模型目录、迁移失效会话模型；当前 82 项单测、ktlint / lint 通过
+
 
 **阶段 5：通话基础（P5，进行中）**
 
@@ -48,12 +58,13 @@ P5 尚未完成：P5-14 真机测试（用户手动验收中，回声、延迟�
 - Token 估算与 usage 校准
 - DataStore 设置体系：单 JSON 键持久化，8 组设置即时生效、重启保留
 - API Key：Android Keystore AES/GCM 加密、多 Key、备注、切换、删除，明文不落盘
-- 模型：`/models` 刷新与缓存，`deepseek-flash`（文本+图片）与 `deepseek-v4-pro`（纯文本）能力灰显
+- 模型：`/models` 刷新与缓存，支持任意模型 ID 手动填写；未返回模型元数据时自动开放思考档位
 - 模型/思考档位/最大输出可在会话内切换；参数预设保存、应用、删除、JSON 导出
 - 图片：PhotoPicker 多选、EXIF 旋转、长边 1568、JPEG 85、最多 8 张、100MB 缓存上限
 - 视觉请求：`content` 数组 + `image_url.detail`，单图 6MB 体积校验；缩略图、全屏预览、待发送删除
-- DeepSeek API Provider 抽象、DTO、Retrofit/OkHttp 网络层
-- `POST /chat/completions` 流式 SSE 解析：content、reasoning_content、finish_reason、usage、`[DONE]`
+- 通用 AI Provider 抽象、DTO、Retrofit/OkHttp 网络层；OpenAI 兼容与 Anthropic Messages 双协议
+- OpenAI `POST /chat/completions` SSE：content、reasoning_content、finish_reason、usage、`[DONE]`
+- Anthropic `POST /v1/messages` SSE：message_start、content_block_delta、message_delta、message_stop、error
 - Base URL 强制 HTTPS；代理、连接/读取/写入超时可配置，下一次请求生效
 - 余额、今日/本月/累计 token 用量与预警阈值
 - 设置页 8 组：API / 模型 / 聊天 / 通话 / 记忆 / 外观 / 数据 / 关于
@@ -121,7 +132,7 @@ app/src/main/java/io/github/we007oneday_byte/softseek/
 │   │   ├── entity/         # Room 实体与关系
 │   │   ├── converter/      # tags / 枚举 TypeConverter
 │   │   └── AppDatabase.kt
-│   ├── remote/             # DeepSeekApi / DTO / SSE / Provider
+│   ├── remote/             # OpenAiApi / AnthropicApi / DTO / SSE / Provider
 │   ├── repository/         # Room 仓储 + DefaultChatRepository + UsageRepository
 │   ├── settings/           # DataStore SettingsRepository
 │   ├── model/              # ModelCatalog
@@ -131,7 +142,7 @@ app/src/main/java/io/github/we007oneday_byte/softseek/
 │   ├── auth/               # ApiKeyStore
 │   ├── context/            # ContextAssembler / TokenEstimator
 │   ├── model/              # 领域模型
-│   ├── provider/           # AiProvider / AiChatService
+│   ├── provider/           # AiProvider / RoutingAiProvider / ProviderType
 │   └── repository/         # 仓储接口
 └── ui/
     ├── components/common/   # CommonButton / SettingItem / MarkdownText
@@ -155,7 +166,7 @@ CI 工作流见 `.github/workflows/android.yml`，在 push / PR 时执行构建�
 ## 设计约束
 
 - 无 WebView：所有界面使用 Compose 原生实现
-- 无自建服务端：客户端直连 DeepSeek 官方 API
+- 无自建服务端：客户端直连你配置的 OpenAI 兼容或 Anthropic Messages 服务
 - 无数据上传：API Key、聊天记录、记忆池仅保存在本机
 - 最小权限：按功能申请，不申请无关权限
 - 全 Kotlin：不引入 Java/Kotlin 混合实现

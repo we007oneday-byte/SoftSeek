@@ -51,6 +51,7 @@ android {
 
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     lint {
@@ -58,6 +59,10 @@ android {
         abortOnError = true
         checkReleaseBuilds = false
         warningsAsErrors = false
+    }
+
+    testOptions {
+        unitTests.isIncludeAndroidResources = true
     }
 
     ktlint {
@@ -140,6 +145,8 @@ dependencies {
     implementation(libs.coil.compose)
     implementation(libs.exifinterface)
     implementation(libs.vosk.android)
+    implementation(libs.slf4j.api)
+    implementation(libs.logback.android)
     ksp(libs.hilt.compiler)
     ksp(libs.room.compiler)
     ksp(libs.androidx.hilt.compiler)

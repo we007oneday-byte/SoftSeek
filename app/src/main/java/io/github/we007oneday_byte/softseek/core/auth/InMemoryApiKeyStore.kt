@@ -45,6 +45,15 @@ class InMemoryApiKeyStore
             return id
         }
 
+        override fun updateKey(id: String, label: String, key: String?, note: String?) {
+            val existing = notes[id] ?: return
+            notes[id] = (label.ifBlank { existing.first }) to note
+            if (activeId == id && !key.isNullOrBlank()) {
+                state.value = key.trim()
+            }
+            publish()
+        }
+
         override fun activateKey(id: String) {
             if (!notes.containsKey(id)) return
             activeId = id

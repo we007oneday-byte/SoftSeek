@@ -4,11 +4,11 @@
 |---|---|
 | 评审对象 | 《DeepSeek 第三方安卓客户端 完整AI开发执行文档 V1.0》 |
 | 项目代号 | SOFTSEEK / SK |
-| 文档版本 | V1.4（供应链签名与验签补充） |
-| 编制日期 | 2026-11-19 |
-| 变更记录 | V1.1：D1 保留 SOFTSEEK（接受相似度风险）；D2 首版 Vosk small-cn 42MB + 系统 TTS；D3 自动清理默认关闭 + 手动触发。V1.2：D7 包名按 GitHub owner 定为 `io.github.we007oneday_byte.softseek`。V1.3：新增 §5.9 版本升级与软件发布计划（应用内 24h 更新检查、GitHub→Gitee 双源、Vite/GitHub Pages 官网、地理路由下载、Release 命名规范）。V1.4：补充 CI 构建 APK + SHA-256 + GPG 清单签名；客户端内置公钥/证书指纹，静默验签与哈希校验，失败拦截；密钥不硬编码 |
+| 文档版本 | V1.6（取消 Gitee 双源，改为 GitHub 单源发布） |
+| 编制日期 | 2026-11-19（V1.6 更新 2026-11-20） |
+| 变更记录 | V1.1：D1 保留 SOFTSEEK（接受相似度风险）；D2 首版 Vosk small-cn 42MB + 系统 TTS；D3 自动清理默认关闭 + 手动触发。V1.2：D7 包名按 GitHub owner 定为 `io.github.we007oneday_byte.softseek`。V1.3：新增 §5.9 版本升级与软件发布计划（应用内 24h 更新检查、双源、Vite/GitHub Pages 官网、地理路由下载、Release 命名规范）。V1.4：补充 CI 构建 APK + SHA-256 + GPG 清单签名；客户端内置公钥/证书指纹，静默验签与哈希校验，失败拦截；密钥不硬编码。V1.5：新增 §11 ZL-01 增量任务（黑白 UI/UX、品牌与动效、模型/Provider 配置、AI 通话独立化、离线模型与 TTS 多后端），标记为下一 P0 大任务。V1.6：**取消 Gitee 双源、Gitee Token 与地域分流，P7 改为 GitHub 单源发布**；Gitee/CDN/OSS 作为流量增长后的独立增量，不进入本期验收 |
 | 技术基线核对时间 | 2026-11-19（DeepSeek API、Android 17 SDK、Vosk、sherpa-onnx） |
-| 评审结论 | **有条件通过；6 个硬缺口已给出修正方案；D1/D2/D3 已确认；V1.4 已补全升级、发布、供应链签名与客户端验签计划，可进入阶段 0** |
+| 评审结论 | **有条件通过；6 个硬缺口已给出修正方案；D1/D2/D3 已确认；V1.4 已补全升级、发布、供应链签名与客户端验签计划。当前 P1～P4 已完成，P5 基础已完成并推送，P5-14 真机验收收尾；下一 P0 为 ZL-01，见 §11** |
 | 适用读者 | 开发执行人、代码评审人、项目负责人 |
 
 > 本文不是对原需求文档的复述，而是把原文档转成“能开工、能验收、能排期”的工程基线。原文档中的功能设计整体成立，问题集中在**接口契约、依赖坐标、数据模型一致性、系统权限与工具链**五类，均已给出可直接执行的修正方案。
@@ -34,8 +34,8 @@
 
 ### 0.3 工作量与关键路径
 
-- 总工作量：**约 92.0 人日**（含 P5-06 可选 TTS 与 P7 发布增量 11.0 人日；若首版不做 P5-06 则 90.5 人日），含 20% 缓冲约 **110.4 人日**；按每周 5 天计约 **22～23 周**。
-- 关键路径：`P0 工具链 → P1 工程骨架 → P2 数据/记忆池 → P3 API/聊天 → P5 通话 → P6 迁移/适配 → P7 发布（含 24h 升级检查、双源同步、官网、供应链签名与客户端验签）`。
+- 总工作量：**约 91.0 人日**（含 P5-06 可选 TTS 与 P7 发布增量 10.0 人日；若首版不做 P5-06 则 89.5 人日），含 20% 缓冲约 **109.2 人日**；按每周 5 天计约 **22～23 周**。
+- 关键路径：`P0 工具链 → P1 工程骨架 → P2 数据/记忆池 → P3 API/聊天 → P5 通话 → P6 迁移/适配 → P7 发布（含 24h 升级检查、GitHub 单源发布、官网、供应链签名与客户端验签）`。
 - 可并行项：P4 设置/多模态可在 P3 后半段并行；P6 的 16KB/edge-to-edge 验证可提前到 P2 之后。
 - 最大不确定性：P5 通话（回声消除、打断、贴脸熄屏）与 P6 的 Vosk 16KB 兼容，建议各留 2 天技术验证。
 
@@ -110,12 +110,14 @@
 | 系统适配 | Android 11～17 | P0 | 16KB、edge-to-edge 重点 |
 | 系统适配 | 权限动态申请 | P0 | 通知/录音 |
 | 系统适配 | 前台服务保活 | P0 | 通话专用 |
-| 发布/升级 | 应用内 24h 升级检查与提醒 | P0 | WorkManager + 双源静态清单；见 §5.9 |
+| 发布/升级 | 应用内 24h 升级检查与提醒 | P0 | WorkManager + GitHub Pages 静态清单；见 §5.9 |
 | 发布/升级 | CI 构建 APK、SHA-256、GPG 清单签名 | P0 | GitHub Actions；正式版必须签名；见 §5.9.9 |
 | 发布/升级 | 客户端静默验签/哈希/APK 证书校验，失败拦截 | P0 | 内置更新公钥与证书指纹；见 §5.9.9 |
-| 发布/升级 | GitHub→Gitee 双源 Release/资产同步 | P0 | GitHub Actions；见 §5.9.5 |
+| 发布/升级 | GitHub Release 单源发布 | P0 | GitHub Actions；见 §5.9.5；CDN/OSS 后置 |
 | 发布/分发 | GitHub Pages + Vite 官网 | P0 | 介绍/功能/API/指南/下载；见 §5.9.6 |
-| 发布/分发 | 按国家码切换 GitHub/Gitee 下载源 | P0 | 失败默认 GitHub，可手动切换 |
+| 发布/分发 | 下载中心与历史版本（GitHub 单源） | P0 | 失败给 GitHub 手动下载入口；不按国家码分流 |
+
+> ZL-01 增量需求（黑白 UI/UX、品牌图标、设置菜单化、Provider/模型配置、AI 通话独立化、离线模型与 TTS 多后端）单列于 §11，不重复计入本矩阵。
 
 ### 1.3 用户关键路径
 
@@ -323,9 +325,9 @@ Provider 实现只负责“请求构造 + 响应映射 + 错误码翻译”，UI
 | R13 | 导入官方格式未知 | 中 | 迁移功能延期 | 中 | 无样本 | 先要样本；adapter 化 | P6 |
 | R14 | 本机无 SDK/Studio/Git，JDK 25 | 已发生 | 无法编译 | 高 | `java -version` 25 | 装 JDK 21 + SDK 36 + Git | P0 |
 | R15 | compileSdk 37 预览不稳定 | 中 | CI 失败 | 中 | AGP 不识别 37 | 36 发布，37 独立验证 | P0/P6 |
-| R16 | GitHub API / Pages 国内访问不稳 | 高 | 官网历史版本与更新检查失败 | 高 | 请求超时、403/429 | 构建期生成静态索引；Gitee 镜像兜底；24h 缓存与手动源切换 | P7 |
-| R17 | Gitee 同步/附件上传受平台限制 | 中高 | 双源失效、国内下载断 | 高 | API 401/403、附件超限 | 先做仓库镜像与 Release 资产；失败重试并标记 stale；保留 GitHub 主源 | P7 |
-| R18 | 地理检测误判或隐私争议 | 中 | 下载源错误、合规质疑 | 中 | VPN/代理、接口失败 | 仅取国家码、3s 超时、失败按非大陆默认 GitHub、提供手动切换与隐私说明 | P7 |
+| R16 | GitHub API / Pages 国内访问不稳 | 高 | 官网历史版本与更新检查失败 | 高 | 请求超时、403/429 | 构建期生成静态索引；24h 缓存；官网提供 GitHub 手动下载入口；流量增长后再评估 CDN/OSS | P7 |
+| R17 | GitHub 单源故障/账号风险 | 中高 | Release 下载中断、更新检查失败 | 高 | 404/5xx、限流 | 保留签名清单与 GitHub 手动入口；发布记录归档；CDN/OSS 作为后续独立任务，不进入本期验收 | P7 |
+| R18 | GitHub 在中国大陆访问不稳定 | 高 | 官网/清单/资产加载失败，用户无法下载 | 中 | 网络策略、DNS 污染 | 官网保留“复制直链”和校验说明；客户端保留上次已签名清单；不引入未签名镜像；CDN/OSS 另立任务 | P7 |
 | R19 | GPG/APK 签名私钥泄露或轮换失败 | 高 | 伪造更新、供应链攻击 | 高 | 私钥误提交、丢失、过期 | 私钥仅 GitHub Secrets；GPG 使用专用子密钥；双钥重叠与撤销流程；APK keystore 分环境保存 | P7 |
 | R20 | 客户端验签误杀或证书 API 兼容问题 | 中 | 正常更新被拦截 | 中 | Key ID 不匹配、Android 版本差异 | 受信公钥环、灰度发布、失败时给官网手动下载兜底、可诊断但不泄露敏感信息 | P7 |
 
@@ -345,9 +347,9 @@ Provider 实现只负责“请求构造 + 响应映射 + 错误码翻译”，UI
 | ADR-08 | 语音：`AsrEngine`/`TtsEngine` 接口 + 可替换实现 | 便于 Vosk→sherpa 替换 | 多一层抽象 |
 | ADR-09 | 通话状态机独立于 ChatViewModel | 通话有 ASR/TTS/打断/音频焦点多状态 | 需清晰状态图 |
 | ADR-10 | 导出格式版本化（`format_version`）+ ZIP 携带图片 | 可重导入、可迁移 | 解析器需兼容旧版 |
-| ADR-11 | 更新检查读静态 `updates/{channel}.json`，不直接依赖 GitHub Release API | 避免移动端限流/被墙；CI 生成、Pages/Gitee 双托管 | 清单需原子发布、缓存一致性 |
-| ADR-12 | 官网地理路由采用客户端 IP 国家码 + 时区/语言兜底，不上服务端 | 纯 GitHub Pages 无服务端；隐私影响小 | VPN 误判，需手动切换 |
-| ADR-13 | 下载直链 Release 资产，不经 Pages 代理 APK | 不消耗 Pages 流量、无跳转落地页 | 依赖 GitHub/Gitee 资产可用性 |
+| ADR-11 | 更新检查读静态 `updates/{channel}.json`，不直接依赖 GitHub Release API | 避免移动端限流/被墙；CI 生成、GitHub Pages 单托管 | 清单需原子发布、缓存一致性 |
+| ADR-12 | 官网不做地理路由，P7 采用 GitHub 单源发布 | 取消 Gitee 双源；失败给 GitHub 手动入口，降低实现复杂度 | 大陆访问不稳；CDN/OSS 后续独立评估 |
+| ADR-13 | 下载直链 Release 资产，不经 Pages 代理 APK | 不消耗 Pages 流量、无跳转落地页 | 依赖 GitHub 资产可用性；未来以 `urls[]` 扩展 CDN/OSS |
 | ADR-14 | APK 用 Android keystore 签名，更新清单用 GPG detached signature | 两类签名职责分离；公钥可公开固定 | 需维护两套密钥与轮换 |
 | ADR-15 | 客户端先验清单签名、SHA-256、APK 证书指纹，再弹安装；不静默安装 | 满足失败拦截；符合 Android 安装模型 | 首次需用户允许未知来源 |
 
@@ -469,7 +471,7 @@ Speaking → Interrupted(VAD 命中) → Listening
 | P5-13 | 降档/恢复/归档 | 进入 low、挂断还原、写记忆池 | P5-08 | 0.5 | 参数隔离 |
 | P5-14 | 通话真机测试 | 回声/延迟/打断/1h 耗电；不启用 P5-06 时系统 TTS 全链路 | P5-12 | 1.0 | 报告归档 |
 
-> P5-06 为 P1 可选：首版不做时扣减 1.5 人日，总工作量降至 90.5 人日；阶段 5 验收以 P5-01～P5-05、P5-07～P5-14 为准。
+> P5-06 为 P1 可选：首版不做时扣减 1.5 人日，总工作量降至 89.5 人日；阶段 5 验收以 P5-01～P5-05、P5-07～P5-14 为准。
 
 ### 5.7 阶段 6：导入导出与全版本适配（10 人日）
 
@@ -487,7 +489,7 @@ Speaking → Interrupted(VAD 命中) → Listening
 | P6-10 | 性能优化 | baseline profile、列表 key、渲染缓存 | P3-13 | 1.5 | 启动/帧率达标 |
 | P6-11 | 可访问性/国际化 | contentDescription、字符串 | P4-11 | 0.5 | Scanner 无阻断 |
 
-### 5.8 阶段 7：测试与发布（18.0 人日，含 §5.9 发布增量）
+### 5.8 阶段 7：测试与发布（17.0 人日，含 §5.9 发布增量）
 
 | ID | 任务 | 关键产出 | 依赖 | 人日 | 验收 |
 |---|---|---|---|---|---|
@@ -501,11 +503,11 @@ Speaking → Interrupted(VAD 命中) → Listening
 | P7-08 | 合规复审 | 名称/图标/色值/文案 | P7-07 | 0.5 | 法务/自检通过 |
 | P7-09 | RC 回归 | 全量回归、打 tag | P7-08 | 0.5 | 无 P0/P1 缺陷 |
 
-> 本节 P7-01～P7-09 合计 7.0 人日；P7-10～P7-18 见 §5.9.10，合计 11.0 人日；阶段 7 总计 18.0 人日。
+> 本节 P7-01～P7-09 合计 7.0 人日；P7-10～P7-17 见 §5.9.10，合计 10.0 人日；阶段 7 总计 17.0 人日。
 
-### 5.9 版本升级与软件发布计划（P7 增量，11.0 人日）
+### 5.9 版本升级与软件发布计划（P7 增量，10.0 人日）
 
-本节是 P7 的发布增量：解决“用户如何知道有新版本、国内如何下载、官网如何展示与分发、下载是否可信”四个问题。**GitHub Releases 是唯一发布事实源，Gitee 是同版本镜像源，GitHub Pages 是官网与更新清单托管面**；APK 用 Android keystore 签名，更新清单用 GPG 分离签名，客户端验签失败即拦截。
+本节是 P7 的发布增量：解决“用户如何知道有新版本、官网如何展示与分发、下载是否可信”三个问题。**GitHub Releases 是唯一发布事实源，GitHub Pages 是官网与更新清单托管面**；APK 用 Android keystore 签名，更新清单用 GPG 分离签名，客户端验签失败即拦截。本期不做 Gitee 双源，也不做 CDN/OSS 镜像；等流量增长后另立任务。
 
 #### 5.9.1 目标、渠道与边界
 
@@ -515,8 +517,9 @@ Speaking → Interrupted(VAD 命中) → Listening
 | 完整性校验 | 清单 GPG 验签 → 资产 SHA-256 → APK 证书指纹，任一步失败即拦截 |
 | 更新通道 | `stable`（正式版，默认）与 `beta`（测试版，需用户在设置中主动开启） |
 | 正式源 | GitHub Releases；发布资产、更新清单、官网由 GitHub 托管 |
-| 镜像源 | P7 全部验收后，由 GitHub Actions 自动同步仓库、标签、Release 资产到 Gitee |
-| 官网 | GitHub Pages + Vite 静态站；中国大陆访问时下载 CTA 优先切到 Gitee，境外默认 GitHub |
+| 镜像源 | **本期无**；CDN/OSS 不进入 P7 验收，流量增长后另开任务 |
+| 官网 | GitHub Pages + Vite 静态站；不做国家码/时区分流，统一 GitHub 下载 |
+| 单源风险 | GitHub 国内访问不稳作为已知风险接受；官网保留手动下载入口，后续再评估 CDN/OSS |
 | 不做 | 不做应用内代理下载服务器、不做静默安装、不绕过 Android 签名/未知来源校验、不承诺应用商店上架 |
 
 #### 5.9.2 版本号、发布性质与包命名
@@ -546,25 +549,20 @@ SOFTSEEK-测试版-v1.3.0-beta.1.apk
 - 软件名固定大写 `SOFTSEEK`；发布性质固定中文 `正式版` / `测试版`；版本号带 `v` 前缀且只出现一次。
 - 仅使用半角连字符 `-`，不得有空格、下划线、括号、斜杠、冒号；扩展名固定 `.apk`。
 - Release tag 与版本号一致：`v1.2.3`、`v1.3.0-beta.1`；Release 标题为 `SOFTSEEK 正式版 v1.2.3` / `SOFTSEEK 测试版 v1.3.0-beta.1`。
-- 每个 APK 必须同时生成 `.sha256` 校验文件；GitHub/Gitee 资产文件名和 SHA256 必须完全一致。
+- 每个 APK 必须同时生成 `.sha256` 校验文件；GitHub Release 资产文件名与 SHA256 必须与清单一致。
 - `mapping.txt`、签名材料、密钥、token 一律不进公开 Release；AAB 不作为官网直接下载项。
 - CI 在发布前校验：APK 的 `versionName`/`versionCode`、文件名、tag、清单字段四者一致；不一致直接失败。
 
 #### 5.9.3 更新清单（update manifest）
 
-更新检查不直接让手机端打 GitHub Release API，而是读取 CI 生成的静态清单，避免移动网络被墙、API 限流和解析差异。清单随官网一起部署：
+更新检查不直接让手机端打 GitHub Release API，而是读取 CI 生成的静态清单，避免移动端限流、API 解析差异与 GitHub API 不可达。清单随官网一起部署在 GitHub Pages：
 
 ```text
 https://we007oneday-byte.github.io/SoftSeek/updates/stable.json
 https://we007oneday-byte.github.io/SoftSeek/updates/beta.json
 ```
 
-Gitee 镜像仓库保存同一份文件，作为中国大陆兜底：
-
-```text
-https://gitee.com/{GITEE_OWNER}/SoftSeek/raw/main/updates/stable.json
-https://gitee.com/{GITEE_OWNER}/SoftSeek/raw/main/updates/beta.json
-```
+本期不引入 CDN/OSS；`assets[].urls[]` 只填 GitHub 直链，未来若加镜像再追加，不改变清单验签与哈希校验逻辑。
 
 清单最小字段：
 
@@ -580,7 +578,7 @@ https://gitee.com/{GITEE_OWNER}/SoftSeek/raw/main/updates/beta.json
 | `signingKeyId` | GPG 公钥指纹/Key ID；客户端只接受受信 Key ID |
 | `signatureUrl` | 与清单同源的 detached `.asc` URL；对清单原始字节验签 |
 | `releaseNotes` | 简短更新说明，官网与提醒弹窗共用 |
-| `assets[]` | `name`、`size`、`sha256`、`githubUrl`、`giteeUrl` |
+| `assets[]` | `name`、`size`、`sha256`、`urls[]`（`source`、`url`）；本期 `source=github`，未来可追加 CDN/OSS |
 
 发布顺序必须是：**先上传 Release 资产 → 再提交清单 → 再部署 Pages**。清单更新采用“写临时文件 + 原子替换 + 提交”，避免用户读到半成品。
 
@@ -605,9 +603,9 @@ https://gitee.com/{GITEE_OWNER}/SoftSeek/raw/main/updates/beta.json
 
 **源选择**：
 
-1. 设置项“更新源”默认 `自动`：系统时区为 `Asia/Shanghai` / `Asia/Urumqi` / `Asia/Chongqing`，或系统语言为 `zh-CN` 时，优先 Gitee 清单；否则优先 GitHub Pages。
-2. 首选源 5 秒超时或非 2xx 时，自动切另一源；两源都失败则保留 `pending` 状态，不打扰用户，下一次再试。
-3. 手动检查忽略 24h 间隔，但仍走同一套源回退。
+1. 本期只使用 GitHub Pages 清单，不按国家码/时区切换源，也不引入 CDN/OSS。
+2. 清单请求 5 秒超时或非 2xx 时，保留 `pending` 状态，不打扰用户，下一次再试；官网提供 GitHub 手动下载入口。
+3. 手动检查忽略 24h 间隔，但仍走同一套校验。
 4. 带 `If-None-Match` 请求；304 时只更新 `lastCheckAt`。
 
 **版本比较与提醒**：
@@ -616,50 +614,43 @@ https://gitee.com/{GITEE_OWNER}/SoftSeek/raw/main/updates/beta.json
 - 发现新版本后写入 `pending*`；用户下次进入应用前台时显示应用内弹窗。
 - 按钮：`立即更新` / `稍后` / `跳过此版本`；低于 `minSupportedVersionCode` 时只保留 `立即更新`。
 - `稍后` 24 小时内不再弹同一版本；`跳过此版本` 直到出现更高 `versionCode` 才再提示。
-- 弹窗展示版本号、更新说明、大小、SHA256 前 12 位、当前源与备用源；下载跳转官网下载页或 Release 直链，不在应用内静默下载安装。
+- 弹窗展示版本号、更新说明、大小、SHA256 前 12 位、来源（GitHub）与签名状态；下载跳转官网下载页或 GitHub Release 直链，不在应用内静默下载安装。
 - 下载完成后如走应用内下载器，必须校验 SHA256；安装前由系统校验 APK 签名，签名不一致拒绝。
 
-**测试**：版本比较、同版本不提示、跨通道不提示、24h 抑制、跳过后新版本恢复提示、首选源超时回退、304、清单损坏/字段缺失、`minSupportedVersionCode` 强制更新。
+**测试**：版本比较、同版本不提示、跨通道不提示、24h 抑制、跳过后新版本恢复提示、清单超时/非 2xx 保留 pending、304、清单损坏/字段缺失、`minSupportedVersionCode` 强制更新。
 
 **验签与安装校验**：客户端只接受 `signed` 的 stable 清单；下载 APK 后先校验清单 GPG 签名，再校验 SHA-256，最后校验 APK 证书指纹，全部通过才弹安装。任一步失败即删除缓存并拦截，不提供“仍然安装”入口。具体流程见 §5.9.9。
 
-#### 5.9.5 GitHub → Gitee 双源同步
+#### 5.9.5 发布源策略：GitHub 单源（Gitee 取消，CDN/OSS 后置）
 
-**触发**：`release: published`、`workflow_dispatch`；仅允许 `v*` tag。正式发布任务挂在 GitHub Environment `production` 下，配置 Required reviewers，确保“所有工程验收完成”后人工批准才同步；日常测试版可走 `beta` environment。
+**决策（2026-11-20）**：P7 只做 GitHub 单源发布，不再配置 Gitee 仓库、Gitee Token、`release-sync` workflow，也不做国家码下载分流。理由：Gitee 单附件 100MB、仓库附件总量 1GB，无法承载后续大模型包；双源同步增加维护面和失败面；先把软件做完，流量增长后再评估 CDN/OSS。
 
-**同步范围**：
+**发布范围**：
 
-1. `main` 分支与全部 tag 镜像到 Gitee（代码双源）。
-2. 同一 tag 的 Gitee Release：标题、说明、正式/测试性质、资产。
-3. APK、`.sha256`、更新清单 `updates/stable.json` / `beta.json`、清单签名 `.asc`、更新公钥 `updates/softseek-update-signing-key.asc`。
-4. 不镜像 GitHub Issues、PR、Actions 日志、Secrets。
+1. GitHub Release：APK、`.sha256`、`updates/{channel}.json`、`.asc`、更新公钥。
+2. GitHub Pages：官网与 `updates/*.json` 静态清单。
+3. 不镜像 Issues、PR、Actions 日志、Secrets。
 
-**Workflow 步骤（`.github/workflows/release-sync.yml`）**：
+**Workflow**：
 
-1. Checkout 并校验：tag、`versionName`、`versionCode`、资产命名、SHA256、清单字段、GPG 签名可验证。
-2. 用 `GITEE_TOKEN` 或部署密钥把 `main` 与 tags 推到 Gitee；已存在则快进，不强制覆盖历史。
-3. 查询 Gitee 同 tag Release：存在则更新说明，不存在则创建；按资产名幂等上传，重名先删旧再传，禁止产生两个同名资产。
-4. 下载 Gitee 资产回读并计算 SHA256，与 GitHub 资产比对；不一致则失败。
-5. 生成/更新双源清单并完成 GPG 签名，提交 `updates/*.json`、`updates/*.asc`、公钥到 `main`，推送 GitHub 与 Gitee；再触发 Pages 部署。
-6. 对 `githubUrl`、`giteeUrl` 各发一次 `HEAD` 请求，确认 200/302 且 `Content-Length` 与清单一致；再对 `.asc` 做一次签名验证。
-7. 任一步失败：保留 GitHub Release 与已生成清单的 GitHub 链接，Gitee URL 置空并标记 `mirrorStatus=stale`；官网显示“码云镜像暂不可用，请用 GitHub”，不让整个发布静默失败。
+- `.github/workflows/release.yml`：构建、签名、生成清单、GPG 签名、创建/更新 Release、上传资产。
+- `.github/workflows/pages.yml`：部署官网与清单。
+- 不创建 `release-sync.yml`。
 
 **Secrets（只放 GitHub Environment Secrets）**：
 
-- `GITEE_TOKEN`：最小权限，仅仓库写与 Release 资产上传。
-- `GITEE_OWNER`、`GITEE_REPO`：默认与 GitHub 同名，可覆盖。
-- 可选 `GITEE_SSH_PRIVATE_KEY`：改用 SSH 镜像时使用。
 - `ANDROID_KEYSTORE_BASE64`、`ANDROID_KEYSTORE_PASSWORD`、`ANDROID_KEY_ALIAS`、`ANDROID_KEY_PASSWORD`：release APK 签名。
 - `GPG_PRIVATE_KEY`、`GPG_PASSPHRASE`、`GPG_KEY_ID`：更新清单签名；可选用专用子密钥。
+- 不配置 `GITEE_TOKEN`、`GITEE_OWNER`、`GITEE_REPO`、`GITEE_SSH_PRIVATE_KEY`。
 
 Token、keystore、GPG 私钥不得写入代码、日志、Pages、清单或 APK；Workflow 日志必须掩码，临时 keyring 在 job 结束后删除。
 
 **平台约束**：
 
-- Gitee 仓库需提前创建并完成实名/权限配置；Release 资产有大小/频率限制，超限时改用分卷或对象存储不在本期范围。
-- Gitee Release 没有 GitHub 的 `prerelease` 布尔语义，正式/测试性质以 Release 标题和清单 `channel` 为准；历史正式版过滤只在 GitHub 索引侧执行。
-- Gitee Pages 首次开通可能需要人工审核；本计划不依赖 Gitee Pages，官网始终在 GitHub Pages，Gitee 只提供仓库/Release/raw 清单。
-- 国内用户即使无法访问 GitHub Pages，也可通过应用内 Gitee raw 清单获得更新提示，再走 Gitee Release 下载。
+- GitHub Release 单资产上限足够当前 APK；未来大模型包如果超过 GitHub 限制，再按“分卷 + 清单 sha256”或 CDN/OSS 处理，不在本期做。
+- GitHub 在中国大陆访问可能不稳；官网提供手动下载入口，客户端保留上次已签名清单，不因单源失败弹未校验更新。
+- 未来加 CDN/OSS 时，只扩展 `assets[].urls[]`，不改变“签名清单 → SHA-256 → APK 证书”的信任链；CDN/OSS 不允许签发清单。
+
 
 #### 5.9.6 官网：GitHub Pages + Vite
 
@@ -692,45 +683,38 @@ website/
 
 | 页面 | 必备内容 | 验收 |
 |---|---|---|
-| 首页 Hero | 软件名、一句话定位、当前正式版号、`下载最新正式版`主 CTA、GitHub/Gitee 入口、非官方声明 | 首屏 3 秒内可开始下载 |
+| 首页 Hero | 软件名、一句话定位、当前正式版号、`下载最新正式版`主 CTA、GitHub 仓库入口、非官方声明 | 首屏 3 秒内可开始下载 |
 | 软件介绍 | 是什么、给谁用、纯本地/零服务端、与官方客户端区别、不收集数据、支持范围 | 无夸大/无“官方”误导 |
 | 功能介绍 | 聊天/思考、图片多模态、模型与档位、记忆池与清理、语音（P5 状态）、主题、多 Key、导入导出；每项配截图或状态标签 | 功能与已发布版本一致 |
 | API 接入指南 | 注册 DeepSeek、创建 Key、余额与计费、应用内填写、BaseURL、模型选择、图片限制、错误码（401/402/429/5xx）、代理与安全 | 新用户可按步骤完成首次对话 |
 | 软件使用指南 | 安装与未知来源、首次配置、会话、发图、模型/档位、记忆清理预览、导出/导入、语音、常见问题与故障排查 | 每步有编号与截图 |
-| 下载中心 | 最新正式版卡片、测试版入口、版本/日期/大小/minSdk/SHA256、清单签名状态/Key ID、主源+备用源按钮、更新说明 | 不跳 GitHub 落地页；签名状态可见 |
-| 历史版本 | 正式版列表、测试版折叠区、版本/日期/大小/SHA、签名状态、双源按钮、分页 | 至少 3 个历史版本可回退 |
-| 隐私与免责 | 非官方声明、Key 本地加密、聊天本地存储、地理检测仅国家码、更新公钥与证书指纹说明、第三方链接 | 与关于页文案一致 |
-| FAQ/更新日志 | 安装失败、Key 无效、图片过大、更新源切换、Gitee 镜像不可用 | 覆盖前 10 个高频问题 |
+| 下载中心 | 最新正式版卡片、测试版入口、版本/日期/大小/minSdk/SHA256、清单签名状态/Key ID、GitHub 直链按钮、更新说明 | 不跳 GitHub 落地页；签名状态可见 |
+| 历史版本 | 正式版列表、测试版折叠区、版本/日期/大小/SHA、签名状态、GitHub 直链/复制、分页 | 至少 3 个历史版本可回退 |
+| 隐私与免责 | 非官方声明、Key 本地加密、聊天本地存储、不采集地理位置、更新公钥与证书指纹说明、第三方链接 | 与关于页文案一致 |
+| FAQ/更新日志 | 安装失败、Key 无效、图片过大、GitHub 访问失败、手动下载与校验 | 覆盖前 10 个高频问题 |
 
 **SEO/性能/可访问性**：静态 HTML 可抓取；`title`/`description`/Open Graph；`sitemap.xml`；图片 `alt`；键盘焦点可见；Lighthouse Performance/Accessibility/SEO ≥ 90；不引入统计脚本和第三方 Cookie。
 
-#### 5.9.7 下载中心、历史版本与地域分流
+#### 5.9.7 下载中心、历史版本与 GitHub 单源
 
-**数据来源（同时满足“通过 GitHub API 检索”与国内可用）**：
+**数据来源**：
 
 - GitHub Actions 在发布/定时任务中调用 `GET /repos/{owner}/{repo}/releases?per_page=100`，按 `Link` 头继续翻页直到取完（最多 300 条），读取 `tag_name`、`prerelease`、`published_at`、`assets[].browser_download_url`、`size`，并关联清单的 `signatureStatus`/`signingKeyId`，生成 `website/src/data/releases.json`。
 - 页面运行时优先读取这份静态索引；索引缺失时才回退到 GitHub Releases API（带 `Accept`、`User-Agent`、ETag；未认证限流 60 次/小时）。
-- Gitee API `GET /api/v5/repos/{owner}/{repo}/releases` 只用于镜像健康检查/备用链接，不替代 GitHub 历史索引。
+- 不调用 Gitee API，不做国家码/时区下载分流；GitHub 是唯一资产源。
 - 只把 `prerelease=false` 放入“历史正式版”；测试版单独折叠，默认不展示。
 
-**最新正式版**：取 `releases/latest` 或静态索引中 `channel=stable` 的最高 `versionCode`；只展示命名合规且带 `.apk` 的资产；按钮直接指向资产的 `browser_download_url`，不经 Release 页面跳转。GitHub/Gitee 两个资产都必须存在且 SHA256 相同。
+**最新正式版**：取 `releases/latest` 或静态索引中 `channel=stable` 的最高 `versionCode`；只展示命名合规且带 `.apk` 的资产；按钮直接指向资产的 `browser_download_url`，不经 Release 页面跳转。清单 `sha256` 必须与 GitHub 资产一致。
 
-**历史版本**：按 SemVer 倒序，展示版本号、发布日期、大小、SHA256 前 12 位、正式/测试标签、主源/备源按钮；每个版本可复制直链；支持 `?channel=beta` 过滤。
-
-**地理路由（实时、失败安全）**：
-
-1. 页面加载后异步请求国家码接口（默认 `https://api.country.is/`，3 秒超时；接口可替换），只取两位国家码，不取经纬度、不写 Cookie。
-2. 返回 `CN` → 主下载源 Gitee，GitHub 作为“备用源”；非 `CN` → 主源 GitHub，Gitee 作为备用。
-3. 检测失败/超时 → 读取 `Intl.DateTimeFormat().resolvedOptions().timeZone`：`Asia/Shanghai`、`Asia/Urumqi`、`Asia/Chongqing` 或 `navigator.language` 以 `zh-CN` 开头 → Gitee；否则按需求默认 GitHub。
-4. 检测成功后立即重写所有下载 CTA 与历史版本主按钮，并显示来源徽标：`中国大陆推荐：码云镜像` / `GitHub 主源`。
-5. 提供手动切换开关，覆盖自动结果直到刷新页面；不持久化地理位置。
-6. 若选中源资产 404/超时，按钮降级到另一源并提示“镜像暂不可用”。
+**历史版本**：按 SemVer 倒序，展示版本号、发布日期、大小、SHA256 前 12 位、正式/测试标签、GitHub 直链/复制按钮；每个版本可复制直链；支持 `?channel=beta` 过滤。
 
 **直接下载**：
 
 - CTA 使用 `<a href="{asset.browser_download_url}" rel="noopener">`，不经过 `github.com/.../releases` 页面；浏览器由 `Content-Disposition` 直接落盘。
 - 不把 APK 放进 Pages 仓库、不用 Pages 代理二进制，避免流量与仓库体积问题。
 - 每个按钮旁展示 `版本号 · 大小 · SHA256 前 12 位 · 清单签名：已签名/Key ID`；另提供“复制直链”和“校验说明”。
+- GitHub 打不开时，页面提示“复制直链到可访问网络重试”，不伪造备用源；CDN/OSS 待流量增长后另开任务。
+
 
 #### 5.9.8 发布 Runbook（每次发版照此执行）
 
@@ -739,10 +723,10 @@ website/
 3. 生成 `SOFTSEEK-正式版-vX.Y.Z.apk` 与 `.sha256`；测试版用 `SOFTSEEK-测试版-vX.Y.Z-beta.N.apk`。
 4. 生成 `updates/stable.json` / `beta.json`，用 GPG 对清单原始字节做 detached 签名；导出公钥。正式版没有 GPG 私钥时直接失败，不发未签名正式版。
 5. 打 tag `vX.Y.Z`，创建 GitHub Release；正式版 `prerelease=false`，测试版 `prerelease=true`；上传 APK、`.sha256`、清单、`.asc`、公钥。
-6. `release-sync` 在 `production` environment 人工批准后执行：镜像 Gitee、上传同 SHA 资产与签名文件、生成双源清单。
-7. `pages` workflow 部署官网；等待 Pages 生效（通常 < 2 分钟）。
-8. 双端验收：非大陆网络访问 → GitHub 主源；大陆网络/时区 → Gitee 主源；应用内 24h 检查能读到新清单并通过 GPG 验签；历史版本列表可见。
-9. 归档发布记录：tag、commit、CI run、APK SHA256、GPG Key ID/验签日志、Gitee Release URL、Pages URL。
+6. `pages` workflow 部署官网与清单；等待 Pages 生效（通常 < 2 分钟）。
+7. GitHub 单源验收：Release 资产可下载；官网 CTA 指向 GitHub 直链；应用内 24h 检查能读到新清单并通过 GPG 验签；历史版本列表可见。
+8. 大陆网络如无法访问 GitHub，记录为已知风险；不阻断发布，提供手动下载说明。
+9. 归档发布记录：tag、commit、CI run、APK SHA256、GPG Key ID/验签日志、Release URL、Pages URL。
 
 #### 5.9.9 构建、GPG 清单签名与客户端验签（补充）
 
@@ -753,10 +737,10 @@ website/
 | 1 | Checkout、JDK 21、Android SDK、Gradle 缓存 | 版本号与 tag 预检 |
 | 2 | 从 Secrets 解码 keystore，执行 `assembleRelease` | 不允许 debug 签名；R8/资源混淆按 P7-05 |
 | 3 | `apksigner verify --print-certs`、提取 `versionName`/`versionCode`、重命名、`sha256sum` | APK 可安装、证书指纹固定、文件名合规 |
-| 4 | 生成 `updates/{channel}.json`：版本、大小、SHA-256、GitHub/Gitee URL、`minSupportedVersionCode` | schema 校验；URL 使用最终资产地址 |
+| 4 | 生成 `updates/{channel}.json`：版本、大小、SHA-256、GitHub 直链、`urls[]`、`minSupportedVersionCode` | schema 校验；URL 使用最终资产地址 |
 | 5 | 导入 GPG 私钥，`gpg --armor --detach-sign` 生成 `.asc`，本地 `gpg --verify`，导出公钥 | 正式版无 GPG 直接失败；签名覆盖清单原始字节 |
 | 6 | 创建/更新 GitHub Release，上传 APK、`.sha256`、清单、`.asc`、公钥 | 资产不覆盖旧 tag；同 tag 重跑先比对 SHA |
-| 7 | 触发 `release-sync` 与 `pages`，归档校验结果 | 双源 SHA、签名、Pages 部署三处一致 |
+| 7 | 触发 `pages`，归档校验结果 | Release SHA、GPG 签名、Pages 部署三处一致 |
 
 关键命令基线（在 runner 上执行，私钥只落在临时 keyring）：
 
@@ -793,9 +777,8 @@ gpg --armor --export "$GPG_KEY_ID" > updates/softseek-update-signing-key.asc
 |---|---|---|
 | Android release keystore | GitHub Secrets / 本地发布机，不进仓库 | 否 |
 | GPG 私钥与口令 | GitHub Secrets，job 结束删除临时 keyring | 否 |
-| GPG 公钥 | App `res/raw`、官网 `updates/`、Gitee raw | 是 |
+| GPG 公钥 | App `res/raw`、官网 `updates/` | 是 |
 | APK 证书 SHA-256 | App 资源/`BuildConfig`、官网展示 | 是 |
-| Gitee token | GitHub Secrets | 否 |
 
 **验收**：正式版无 GPG 时 CI 必须失败；`gpg --verify` 与 `apksigner verify` 日志归档；篡改清单、篡改 APK、错误公钥、证书不匹配四类负向用例全部被拦截；密钥轮换时旧新双钥可验证，撤销后旧签名被拒。
 
@@ -804,25 +787,25 @@ gpg --armor --export "$GPG_KEY_ID" > updates/softseek-update-signing-key.asc
 | ID | 任务 | 关键产出 | 依赖 | 人日 | 验收 |
 |---|---|---|---|---|---|
 | P7-10 | 清单与命名规范 | `updates/*.json` schema、命名校验脚本、CI 版本一致性检查 | P7-05 | 1.0 | 资产名/tag/versionCode/清单四者一致 |
-| P7-11 | 应用内升级检查 | WorkManager 24h、双源清单、DataStore 状态、手动检查 | P7-05 | 1.5 | 24h 唯一任务；首选源失败自动回退；304 不重复提示 |
-| P7-12 | 升级提醒 UI | 应用内弹窗、稍后/跳过/强制更新、下载跳转与 SHA 提示 | P7-18 | 1.0 | 同版本只提示一次；跳过后新版本恢复；强制更新不可跳过 |
-| P7-13 | Gitee 双源同步 | `release-sync.yml`、镜像/Release/资产、回读校验、stale 降级 | P7-17 | 1.0 | 同名资产 SHA 一致；重复执行不产生重复资产 |
-| P7-14 | 官网工程与 Pages | `website/` Vite 工程、`pages.yml`、base path、明暗主题 | P7-05 | 1.0 | Pages URL 可访问；子路径资源不 404 |
-| P7-15 | 官网内容 | 介绍/功能/API 指南/使用指南/隐私/FAQ 详细页 | P7-14 | 1.5 | 页面清单全覆盖；新用户照文档可完成首次对话 |
-| P7-16 | 下载中心与地域分流 | 最新正式版、历史版本、GitHub API 索引、国家码路由、直链 | P7-13/P7-14 | 1.5 | 大陆→Gitee、非大陆→GitHub；直链不跳落地页；历史≥3 版 |
-| P7-17 | Release 构建、GPG 清单签名与上传 | `release.yml`、APK 签名/SHA、清单 `.asc`、Release 资产 | P7-05/P7-10 | 1.0 | 正式版无 GPG 失败；`gpg --verify` 通过；资产可下载 |
-| P7-18 | 客户端验签、哈希与证书校验 | 受信公钥环、`UpdateVerifier`、失败拦截、负向测试 | P7-11 | 1.5 | 篡改清单/APK/证书不匹配全部拦截；不静默安装 |
-| **合计** | | | | **11.0** | |
+| P7-11 | 应用内升级检查 | WorkManager 24h、GitHub Pages 清单、DataStore 状态、手动检查 | P7-05 | 1.5 | 24h 唯一任务；清单超时保留 pending；304 不重复提示 |
+| P7-12 | 升级提醒 UI | 应用内弹窗、稍后/跳过/强制更新、下载跳转与 SHA 提示 | P7-17 | 1.0 | 同版本只提示一次；跳过后新版本恢复；强制更新不可跳过 |
+| P7-13 | 官网工程与 Pages | `website/` Vite 工程、`pages.yml`、base path、明暗主题 | P7-05 | 1.0 | Pages URL 可访问；子路径资源不 404 |
+| P7-14 | 官网内容 | 介绍/功能/API 指南/使用指南/隐私/FAQ 详细页 | P7-13 | 1.5 | 页面清单全覆盖；新用户照文档可完成首次对话 |
+| P7-15 | 下载中心与历史版本 | 最新正式版、历史版本、GitHub API 索引、直链/复制 | P7-13 | 1.5 | GitHub 直链不跳落地页；历史≥3 版；签名状态可见 |
+| P7-16 | Release 构建、GPG 清单签名与上传 | `release.yml`、APK 签名/SHA、清单 `.asc`、Release 资产 | P7-05/P7-10 | 1.0 | 正式版无 GPG 失败；`gpg --verify` 通过；资产可下载 |
+| P7-17 | 客户端验签、哈希与证书校验 | 受信公钥环、`UpdateVerifier`、失败拦截、负向测试 | P7-11 | 1.5 | 篡改清单/APK/证书不匹配全部拦截；不静默安装 |
+| **合计** | | | | **10.0** | |
 
 **新增验收证据**：
 
-- GitHub/Gitee 两个 Release 页面截图 + 两资产 SHA256 对比。
+- GitHub Release 页面截图 + 资产 SHA256/清单签名对比。
 - `stable.json` / `beta.json` 原始文件、`.asc` 签名与 schema 校验日志。
 - `gpg --verify`、`apksigner verify --print-certs` 输出；正式版无 GPG 时 CI 失败记录。
 - 篡改清单、篡改 APK、错误公钥、证书不匹配四组负向用例的拦截截图/日志。
-- 应用内更新检查的 WorkManager 日志、两源切换录屏、24h 抑制测试记录。
+- 应用内更新检查的 WorkManager 日志、24h 抑制测试记录。
 - Pages 部署 run、官网桌面/移动截图、Lighthouse 报告。
-- 大陆/非大陆两种网络下的下载 CTA 切换录屏（可用代理模拟，报告中注明）。
+- GitHub 不可达时的手动下载提示截图（可选，记录为已知风险）。
+- 发布流水线检查记录：`release.yml` 可独立完成发布，无 `release-sync.yml`、无 GITEE Secrets 依赖。
 - 历史版本列表截图与至少一次旧版本回退安装记录。
 
 ### 5.10 工作量汇总
@@ -830,16 +813,16 @@ gpg --armor --export "$GPG_KEY_ID" > updates/softseek-update-signing-key.asc
 | 阶段 | 人日 | 占比 | 主要风险 |
 |---|---|---|---|
 | P0 工具链/契约 | 4.5 | 4.9% | 环境、Key 可用性 |
-| P1 工程基础 | 6.0 | 6.5% | 低 |
-| P2 数据/记忆池 | 9.0 | 9.8% | 清理规则、附件模型 |
-| P3 API/聊天 | 15.0 | 16.3% | SSE、Markdown 库 |
-| P4 多模态/设置 | 14.0 | 15.2% | Key 加密、配置一致性 |
-| P5 通话 | 15.5 | 16.8% | 回声、16KB、贴脸熄屏 |
-| P6 迁移/适配 | 10.0 | 10.9% | 官方格式、性能 |
-| P7 测试/发布（含升级/官网/双源/签名） | 18.0 | 19.6% | 回归、合规、双源可用性、密钥管理 |
-| **合计** | **92.0** | 100% | 含 20% 缓冲约 **110.4 人日** |
+| P1 工程基础 | 6.0 | 6.6% | 低 |
+| P2 数据/记忆池 | 9.0 | 9.9% | 清理规则、附件模型 |
+| P3 API/聊天 | 15.0 | 16.5% | SSE、Markdown 库 |
+| P4 多模态/设置 | 14.0 | 15.4% | Key 加密、配置一致性 |
+| P5 通话 | 15.5 | 17.0% | 回声、16KB、贴脸熄屏 |
+| P6 迁移/适配 | 10.0 | 11.0% | 官方格式、性能 |
+| P7 测试/发布（含升级/官网/签名） | 17.0 | 18.7% | 回归、合规、密钥管理、单源可用性 |
+| **合计** | **91.0** | 100% | 含 20% 缓冲约 **109.2 人日** |
 
-> P7 原 7.0 人日为测试、签名与 GitHub 发布基线；本次新增 11.0 人日为 P7-10～P7-18（24h 升级检查、Gitee 双源、Vite 官网、地理路由下载、供应链签名与客户端验签）。
+> P7 原 7.0 人日为测试、签名与 GitHub 发布基线；本次新增 10.0 人日为 P7-10～P7-17（24h 升级检查、GitHub Pages 清单、Vite 官网、下载中心、供应链签名与客户端验签）。CDN/OSS 不进入本期，流量增长后另立任务。
 
 ---
 
@@ -854,7 +837,7 @@ gpg --armor --export "$GPG_KEY_ID" > updates/softseek-update-signing-key.asc
 | M4 完整体验 | 48.5 | W8～W10 | 多模态/模型/设置/Key | 阶段 4 验收项全过 |
 | M5 通话可用 | 64.0 | W11～W13 | ASR/TTS/打断/通话页 | 阶段 5 验收项全过 |
 | M6 可迁移/可适配 | 74.0 | W14～W15 | 导入导出/11～17/性能 | 阶段 6 验收项全过 |
-| M7 可发布 | 92.0 | W19～W20 | RC、APK/AAB、GitHub/Gitee 双源、Vite 官网、更新清单、GPG 签名与验签 | 阶段 7 含 §5.9 验收项全过 |
+| M7 可发布 | 91.0 | W19～W20 | RC、APK/AAB、GitHub Release、Vite 官网、更新清单、GPG 签名与验签 | 阶段 7 含 §5.9 验收项全过 |
 
 > 日历周按 5 天/周、1 人全职估算；若只能业余投入，按实际可用小时折算，不要按周直接承诺。
 
@@ -873,7 +856,7 @@ gpg --armor --export "$GPG_KEY_ID" > updates/softseek-update-signing-key.asc
 | §12.1 功能清单 | P7-02 | 逐项勾选表 + 缺陷链接 |
 | §12.2 兼容矩阵 | P0-06/P6-07/P7-02 | 机型/版本表格 |
 | §12.3 性能指标 | P6-10/P7-03 | Macrobenchmark/Battery 报告 |
-| 本次新增 §5.9 发布/升级 | P7-10～P7-18 | 双源 Release SHA 对比、GPG 验签、24h 检查日志、Pages 部署、地理路由录屏、历史版本回退记录 |
+| 本次新增 §5.9 发布/升级 | P7-10～P7-17 | GitHub Release SHA/签名、GPG 验签、24h 检查日志、Pages 部署、历史版本回退记录 |
 
 ---
 
@@ -938,8 +921,10 @@ sdkmanager --list
 | D5 | compileSdk 策略 | A 36 发布 + 37 验证；B 直接 37 | **未单独确认，按推荐 A 执行** | 37 预览问题不阻塞发布 |
 | D6 | 多图/文件范围 | A 单图；B 多图（≤8）；C 多图+PDF | **未单独确认，按推荐 B 执行**；纯文本注入，PDF 放 P2 | schema 按多图设计，PDF 延后 |
 | D7 | 包名 | `com.custom.aiclient`；`com.softseek.app`；`io.github.we007oneday_byte.softseek` | **已定 `io.github.we007oneday_byte.softseek`**（owner `we007oneday-byte`）；发布前冻结；如不想暴露账号可退回 `com.softseek.app` | 发布后改包名会导致升级链断裂 |
+| D8 | ZL-01 视觉/配置/TTS 方向 | 十套视觉风格；Provider+Key；本地 TTS 范围；通话隔离；头像回退；动画状态；列表转场 | **已确认按 §11.3 的 ZL-D1～D7 执行**：默认极简，十套风格可切换并持久化；先选 Provider 再填 Key；本期系统 TTS + 外部 TTS + 本地导入壳；`tags=call`；私有副本回退；业务状态 StateFlow、逐帧 Animatable；PullToRefreshBox + 选择性共享元素 | 若在批次 B/C 中途改方向，会造成设置页、Provider 与通话页返工 |
+| D9 | 发布源 | A GitHub 单源；B GitHub+Gitee 双源；C GitHub+CDN/OSS | **已确认 A：P7 只做 GitHub Releases + GitHub Pages；取消 Gitee 仓库/Token/同步 workflow；CDN/OSS 等流量增长后另立任务** | 国内 GitHub 访问不稳是已知风险；不因此阻断本期开发 |
 
-> 说明：D1/D2/D3 为本轮明确确认；D4～D6 按推荐默认执行，如需调整请在进入对应阶段前提出；D7 已按 GitHub owner 确定，发布前冻结。
+> 说明：D1/D2/D3 为开工前明确确认；D4～D6 按推荐默认执行，如需调整请在进入对应阶段前提出；D7 已按 GitHub owner 确定，发布前冻结；D8 为 ZL-01 的增量任务决策，2026-11-19 已确认；D9 为发布源决策，2026-11-20 已确认。
 
 > GitHub：owner `we007oneday-byte`，建议仓库名 `SoftSeek`（公开、MIT）；仓库创建需先完成 GitHub 授权，安排在 P0-03 或 P7-06 执行。
 
@@ -947,11 +932,91 @@ sdkmanager --list
 
 ## 10. 下一步
 
-1. **决策已回填**：D1/D2/D3 已确认；D4～D6 按推荐默认执行；D7 包名定为 `io.github.we007oneday_byte.softseek`。
+1. **决策已回填**：D1/D2/D3 已确认；D4～D6 按推荐默认执行；D7 包名定为 `io.github.we007oneday_byte.softseek`；D8 按 ZL-01 §11.3 执行；D9 发布源定为 GitHub 单源，Gitee/CDN/OSS 后置。
 2. **执行 P0-01～P0-04**：装 JDK 21/SDK 36/Git，生成空壳工程并跑通 `assembleDebug`。
 3. **执行 P0-05**：用一个真实 API Key 跑 5 组冒烟；Key 只放本机临时环境变量，不写代码、不进日志、不提交仓库。
 4. **进入 P1**：主题 → 导航 → 抽屉 → 通用组件，按阶段 1 验收。
 5. 环境就绪后，我可以直接在 `D:\DeepSeekAdK` 生成阶段 1 的工程骨架（Gradle 配置、包结构、主题、导航、空壳页面）。
+6. **下一大任务 ZL-01**：P5-14 真机验收收尾后，从 §11 的批次 A（黑白视觉底座）开始；批次 A 不动数据层。
+
+---
+
+## 11. 增量任务 ZL-01（P0，下一大任务）
+
+| 项目 | 内容 |
+|---|---|
+| 任务编号 | **ZL-01** |
+| 优先级 | **P0**（优先级定义，不是阶段编号 P0） |
+| 任务性质 | 增量开发，不推翻 P1～P5 已有基线 |
+| 当前状态 | 需求、方案与 1～3 项关键决策已确认；2026-11-20 从批次 A 开工 |
+| 计划文档 | `docs/ZL-01_增量开发任务与实施计划.md`（含 §7 TTS 选型评估） |
+| 基线提交 | `ec9a3c3 fix(P5): request microphone permission and harden offline model install` |
+| 独立估算 | 约 **12～18 人日**；不修改原 §0.3 的 91.0 人日基线，待排期确认后合并 |
+
+### 11.1 目标与边界
+
+ZL-01 解决的是“能用之后好不好用”的产品层问题，不再继续堆通话底层：
+
+1. **视觉统一**：把高饱和紫罗兰改为黑白灰单一色系，统一间距、圆角、字号、层级与组件；错误/危险保留唯一红色语义色。
+2. **品牌统一**：App 图标、新对话页、AI 通话头像、GitHub 仓库/Release 使用 `APPICONS/` 下的 SOFTSEEK 资产。
+3. **信息架构**：设置页从单页分组 + 大量弹窗，改为一级菜单 + 二级页面；聊天底部从“API Key 检测”改为模型/思考强度/最大输出。
+4. **模型与 Provider**：支持 OpenAI-compatible 与 Anthropic Messages 协议；用户只填 Key，其余自动填充；模型档案可增删改。
+5. **AI 通话独立**：通话会话不再混入文字聊天列表；通话有独立历史、头像、语音输入动画和 TTS 选择。
+6. **离线模型管理**：Vosk 从单模型升级为模型目录；可选择、删除模型与安装包。
+7. **十套视觉风格**：在极简默认之外，提供云朵、布丁、黑白、太极、黑客、线条、糖果、霓虹、纸墨等可切换布局/配色风格，统一走 `VisualStyleSpec`。
+8. **品牌开屏**：系统 Splash 后播放 SK 标记动画，0.8～1.2 秒，只在冷启动播放，可跳过。
+
+**明确不在 ZL-01 内**：
+
+- 不要求配置真实 API Key；Provider 链路用 mock/本地假 Key 验证，真实 Key 部署另开任务。
+- 不接完整本地 TTS 推理运行时；本地模型只做导入、校验、试听壳，sherpa-onnx 中文模型另立子任务。
+- 不做名人音色库、不做未经授权的声纹克隆。
+- 不改 P6 的导入导出/16KB 适配，不改 P7 的发布门禁；ZL-01 完成后仍按 P6/P7 走发布。
+
+### 11.2 批次与交付物
+
+| 批次 | 范围 | 主要交付物 | 估算 |
+|---|---|---|---|
+| **A 视觉底座** | 黑白 token、十套风格底座、组件统一、App 图标、开屏动画、新对话页 LOGO、Navigation 路由与转场、设置一级菜单骨架 | 可安装的多风格视觉版本；浅/深色截图走查；图标真机检查 | 3～4 人日 |
+| **B 配置与模型底座** | ProviderProfile、OpenAI/Anthropic 适配、只填 Key、ModelProfile、底部模型条、设置二级页、Vosk 多模型 | 可切换 Provider/模型；可新增/删除模型档案；可切换/删除离线模型 | 4～6 人日 |
+| **C AI 通话** | `tags=call` 会话隔离、通话历史、头像裁剪/回退、10 种语音输入动画、字幕入场/高亮/收束、TTS 后端选择 | 通话独立列表；头像可换可回退；动画可选；字幕与收音动画流畅 | 4～6 人日 |
+| **D 动效与验收** | PullToRefreshBox、Shimmer、Coil 渐入、Lottie、更新公告、GitHub 品牌、全量回归 | 列表四态闭环；更新公告页；README/Release 品牌更新；质量门通过 | 2～3 人日 |
+
+### 11.3 已确认决策（2026-11-19）
+
+| 编号 | 决策 | 结论 |
+|---|---|---|
+| ZL-D1 | 极简主题默认 | 近白底、细线分隔、紧凑布局、深色主按钮；十套风格（云朵/布丁/黑白/太极/极简/黑客/线条/糖果/霓虹/纸墨）可切换并持久化；保留深色与跟随系统；仅错误/危险保留红色语义色 |
+| ZL-D2 | API Key 配置 | 先选 provider + 只填 Key；`sk-ant-` 优先 Anthropic，其余探测 OpenAI-compatible `/models`；失败回退手动选择 |
+| ZL-D3 | 本地 TTS 范围 | 本期系统 TTS + 外部 OpenAI-compatible TTS + 本地导入壳；sherpa-onnx 另立子任务 |
+| ZL-D4 | 通话会话隔离 | `tags=call`，不新增 Room 字段/表；文字列表过滤，通话历史只看 `call` |
+| ZL-D5 | 头像回退 | 私有副本缺失/损坏才回退默认；删除相册原图不影响头像 |
+| ZL-D6 | 动画状态 | 业务状态 `StateFlow`；逐帧进度 Compose `Animatable`，不回写 ViewModel |
+| ZL-D7 | 列表与转场 | Material3 `PullToRefreshBox`；共享元素只用于 LOGO/头像，页面整体 `AnimatedContent` |
+| ZL-D8 | 开屏动画 | 系统 Splash 后播放 SK 标记动画，0.8～1.2 秒；仅冷启动，可跳过；不阻塞进入 |
+| ZL-D9 | 十套视觉风格 | 云朵、布丁、黑白、太极、极简、黑客、线条、糖果、霓虹、纸墨；每套定义布局+配色，默认极简，可切换持久化 |
+
+### 11.4 验收口径
+
+- 所有 ZL-01-01～23 有实现或明确降级说明，需求编号见计划文档 §1。
+- 浅色/深色、主要页面、通话链路、模型切换、API 配置全量手工回归；真机由用户手动测试，不依赖 ADB。
+- 单测覆盖 Provider 适配、模型配置、通话标签过滤、头像回退、动画选择持久化。
+- `ktlintCheck lintDebug testDebugUnitTest assembleDebug` 全通过。
+- APK 体积不因 ZL-01 明显膨胀；本地 TTS 模型必须按需下载，不内置大模型。
+- README、更新公告、Release 说明同步；任务板 #40 更新为完成。
+
+### 11.5 TTS 选型结论
+
+- **CloneTTS**：中文/通话/克隆/NPU 方向最合适，但 GitHub 仓库只有 README 与 docs、1 个 commit、无源码、无 LICENSE；不能 fork 或内置，只能作为“外部已安装 TTS/本地 HTTP TTS”兼容目标。
+- **NekoSpeak**：MIT 的完整 Android Kotlin/Compose 工程，架构可参考；但它是完整 App 而非库，arm64 APK 约 88MB、universal 约 135MB，中文能力主要在 v1.5.0 预发布（OmniVoice 约 3GB，tokenizer 有限制），且 eSpeak-NG 为 GPLv3、模型许可证混合、含名人音色库；不整包引入。
+- **SOFTSEEK 路线**：ZL-01 只做系统 TTS + 外部 OpenAI-compatible TTS + 本地导入壳；后续本地 TTS 采用 sherpa-onnx + 中文 Piper/VITS 模型（如 `zh_CN-huayan`，约 84MB 级，按需下载）。
+
+### 11.6 开工顺序
+
+1. 当前从批次 A 开始：先做主题 token + 十套风格底座 + 图标 + 开屏动画 + 路由骨架，不改数据层。
+2. 批次 A 通过真机视觉走查后，再进 B；B 的 Provider/模型配置必须先于 C 的通话模型选择。
+3. C 的通话会话隔离先用 `tags=call` 落地，不做 Room 迁移。
+4. D 只做动效与品牌收尾，不回头改 A/B 的架构。
 
 ---
 
@@ -1104,12 +1169,12 @@ sdkmanager --list
 | P7-10 | P7 | 清单与命名规范 | 待开始 | | |
 | P7-11 | P7 | 应用内升级检查 | 待开始 | | |
 | P7-12 | P7 | 升级提醒 UI | 待开始 | | |
-| P7-13 | P7 | Gitee 双源同步 | 待开始 | | |
-| P7-14 | P7 | 官网工程/Pages | 待开始 | | |
-| P7-15 | P7 | 官网内容 | 待开始 | | |
-| P7-16 | P7 | 下载中心/地域分流 | 待开始 | | |
-| P7-17 | P7 | Release 构建/GPG 签名 | 待开始 | | |
-| P7-18 | P7 | 客户端验签/哈希/证书校验 | 待开始 | | |
+| P7-13 | P7 | 官网工程/Pages | 待开始 | | |
+| P7-14 | P7 | 官网内容 | 待开始 | | |
+| P7-15 | P7 | 下载中心/历史版本 | 待开始 | | |
+| P7-16 | P7 | Release 构建/GPG 签名 | 待开始 | | |
+| P7-17 | P7 | 客户端验签/哈希/证书校验 | 待开始 | | |
+| ZL-01 | ZL | UI/UX、配置与 AI 通话增量（P0） | 计划中 | #40 | 2026-11-20 批次 A |
 
 ---
 

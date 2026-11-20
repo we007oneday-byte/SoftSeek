@@ -2,8 +2,16 @@ package io.github.we007oneday_byte.softseek.ui.screens.settings
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -11,11 +19,15 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
@@ -36,9 +48,12 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.dimensionResource
 import androidx.compose.ui.res.stringResource
@@ -50,13 +65,20 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import io.github.we007oneday_byte.softseek.R
 import io.github.we007oneday_byte.softseek.core.asr.VoskModelState
 import io.github.we007oneday_byte.softseek.core.constant.AppConstants
+import io.github.we007oneday_byte.softseek.core.logging.AppLog
+import io.github.we007oneday_byte.softseek.core.logging.LogModule
 import io.github.we007oneday_byte.softseek.core.settings.AppThemeMode
 import io.github.we007oneday_byte.softseek.core.settings.CodeTheme
 import io.github.we007oneday_byte.softseek.core.settings.ParameterPreset
 import io.github.we007oneday_byte.softseek.domain.auth.ApiKeySummary
 import io.github.we007oneday_byte.softseek.domain.model.AiModelInfo
 import io.github.we007oneday_byte.softseek.domain.model.ReasoningEffort
+import io.github.we007oneday_byte.softseek.domain.provider.ProviderType
 import io.github.we007oneday_byte.softseek.ui.components.common.SettingItem
+import io.github.we007oneday_byte.softseek.ui.theme.LocalSoftSeekUiSettings
+import io.github.we007oneday_byte.softseek.ui.theme.StyleAwareCard
+import io.github.we007oneday_byte.softseek.ui.theme.StyleAwareDivider
+import io.github.we007oneday_byte.softseek.ui.theme.StyleAwareSettingItem
 import io.github.we007oneday_byte.softseek.ui.theme.softSeekColors
 
 private data class SettingsEntry(
@@ -68,6 +90,7 @@ private data class SettingsEntry(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
+    section: SettingsSection,
     onBack: () -> Unit,
     onOpenAbout: () -> Unit = {},
     onOpenGuide: () -> Unit = {},
@@ -84,6 +107,7 @@ fun SettingsScreen(
     val cleanupPreview by viewModel.cleanupPreview.collectAsStateWithLifecycle()
     val baseUrlError by viewModel.baseUrlError.collectAsStateWithLifecycle()
     var showKeyManager by remember { mutableStateOf(false) }
+    var showProvider by remember { mutableStateOf(false) }
     var showBaseUrl by remember { mutableStateOf(false) }
     val importAsrModelLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocument(),
@@ -104,14 +128,17 @@ fun SettingsScreen(
     var showRetention by remember { mutableStateOf(false) }
     var showUsageWarning by remember { mutableStateOf(false) }
     var showPreset by remember { mutableStateOf(false) }
+    var showVisualStyle by remember { mutableStateOf(false) }
+    var showVoiceAnimation by remember { mutableStateOf(false) }
     val context = LocalContext.current
     var cacheMessage by remember { mutableStateOf<String?>(null) }
 
     val activeKey = keys.firstOrNull { it.isActive }
     Scaffold(
+        containerColor = Color.Transparent,
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.settings)) },
+                title = { Text(stringResource(section.titleRes)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -132,56 +159,81 @@ fun SettingsScreen(
                 .padding(innerPadding),
         ) {
             item {
+                if (section != SettingsSection.API) return@item
                 SettingsGroup(
                     title = stringResource(R.string.settings_api),
-                    items = listOf(
-                        SettingsEntry(
-                            title = stringResource(R.string.settings_api_key),
-                            subtitle = activeKey?.let { "${it.label} ${it.hint}" }
-                                ?: stringResource(R.string.settings_api_key_not_set),
-                            onClick = { showKeyManager = true },
-                        ),
-                        SettingsEntry(
-                            title = stringResource(R.string.settings_base_url),
-                            subtitle = settings.baseUrl,
-                            onClick = { showBaseUrl = true },
-                        ),
-                        SettingsEntry(
-                            title = "代理地址",
-                            subtitle = settings.proxyUrl.ifBlank { "不使用代理" },
-                            onClick = { showProxy = true },
-                        ),
-                        SettingsEntry(
-                            title = "连接超时",
-                            subtitle = "${settings.connectTimeoutSeconds}s",
-                            onClick = { showConnectTimeout = true },
-                        ),
-                        SettingsEntry(
-                            title = "读取超时",
-                            subtitle = "${settings.readTimeoutSeconds}s",
-                            onClick = { showReadTimeout = true },
-                        ),
-                        SettingsEntry(
-                            title = "写入超时",
-                            subtitle = "${settings.writeTimeoutSeconds}s",
-                            onClick = { showWriteTimeout = true },
-                        ),
-                        SettingsEntry(
-                            title = stringResource(R.string.settings_balance),
-                            subtitle = when {
-                                balance.loading -> "查询中…"
-                                balance.error != null -> balance.error
-                                balance.balance != null -> balance.balance!!.balances.joinToString(" / ") {
-                                    "${it.currency} ${it.totalBalance}"
-                                }
-                                else -> "点击查询余额"
-                            },
-                            onClick = viewModel::refreshBalance,
-                        ),
-                    ),
+                    items = buildList {
+                        add(
+                            SettingsEntry(
+                                title = "接口协议",
+                                subtitle = settings.providerType.displayName,
+                                onClick = { showProvider = true },
+                            ),
+                        )
+                        add(
+                            SettingsEntry(
+                                title = stringResource(R.string.settings_api_key),
+                                subtitle = activeKey?.let { "${it.label} ${it.hint}" }
+                                    ?: stringResource(R.string.settings_api_key_not_set),
+                                onClick = { showKeyManager = true },
+                            ),
+                        )
+                        add(
+                            SettingsEntry(
+                                title = stringResource(R.string.settings_base_url),
+                                subtitle = settings.baseUrl,
+                                onClick = { showBaseUrl = true },
+                            ),
+                        )
+                        add(
+                            SettingsEntry(
+                                title = "代理地址",
+                                subtitle = settings.proxyUrl.ifBlank { "不使用代理" },
+                                onClick = { showProxy = true },
+                            ),
+                        )
+                        add(
+                            SettingsEntry(
+                                title = "连接超时",
+                                subtitle = "${settings.connectTimeoutSeconds}s",
+                                onClick = { showConnectTimeout = true },
+                            ),
+                        )
+                        add(
+                            SettingsEntry(
+                                title = "读取超时",
+                                subtitle = "${settings.readTimeoutSeconds}s",
+                                onClick = { showReadTimeout = true },
+                            ),
+                        )
+                        add(
+                            SettingsEntry(
+                                title = "写入超时",
+                                subtitle = "${settings.writeTimeoutSeconds}s",
+                                onClick = { showWriteTimeout = true },
+                            ),
+                        )
+                        if (viewModel.capabilities.supportsBalance) {
+                            add(
+                                SettingsEntry(
+                                    title = stringResource(R.string.settings_balance),
+                                    subtitle = when {
+                                        balance.loading -> "查询中…"
+                                        balance.error != null -> balance.error
+                                        balance.balance != null -> balance.balance!!.balances.joinToString(" / ") {
+                                            "${it.currency} ${it.totalBalance}"
+                                        }
+                                        else -> "点击查询余额"
+                                    },
+                                    onClick = viewModel::refreshBalance,
+                                ),
+                            )
+                        }
+                    },
                 )
             }
             item {
+                if (section != SettingsSection.MODEL) return@item
                 SettingsGroup(
                     title = stringResource(R.string.settings_model),
                     items = listOf(
@@ -215,19 +267,22 @@ fun SettingsScreen(
                 )
             }
             item {
-                SettingsGroup(title = stringResource(R.string.settings_chat), items = emptyList())
-                SettingsSwitchItem(
-                    title = stringResource(R.string.settings_streaming),
-                    checked = settings.streamingEnabled,
-                    onCheckedChange = { enabled -> viewModel.update { it.copy(streamingEnabled = enabled) } },
-                )
-                SettingsSwitchItem(
-                    title = stringResource(R.string.settings_markdown),
-                    checked = settings.markdownEnabled,
-                    onCheckedChange = { enabled -> viewModel.update { it.copy(markdownEnabled = enabled) } },
-                )
+                if (section != SettingsSection.CHAT) return@item
+                SettingsGroup(title = stringResource(R.string.settings_chat)) {
+                    SettingsSwitchItem(
+                        title = stringResource(R.string.settings_streaming),
+                        checked = settings.streamingEnabled,
+                        onCheckedChange = { enabled -> viewModel.update { it.copy(streamingEnabled = enabled) } },
+                    )
+                    SettingsSwitchItem(
+                        title = stringResource(R.string.settings_markdown),
+                        checked = settings.markdownEnabled,
+                        onCheckedChange = { enabled -> viewModel.update { it.copy(markdownEnabled = enabled) } },
+                    )
+                }
             }
             item {
+                if (section != SettingsSection.CALL) return@item
                 SettingsGroup(
                     title = stringResource(R.string.settings_call),
                     items = buildList {
@@ -274,6 +329,13 @@ fun SettingsScreen(
                         }
                         add(
                             SettingsEntry(
+                                title = "收音动画",
+                                subtitle = settings.voiceAnimationStyle.label,
+                                onClick = { showVoiceAnimation = true },
+                            ),
+                        )
+                        add(
+                            SettingsEntry(
                                 title = stringResource(R.string.settings_tts),
                                 subtitle = stringResource(R.string.settings_tts_value),
                             ),
@@ -293,83 +355,86 @@ fun SettingsScreen(
                 )
             }
             item {
-                SettingsGroup(title = stringResource(R.string.settings_memory), items = emptyList())
-                SettingsSwitchItem(
-                    title = stringResource(R.string.settings_auto_cleanup),
-                    subtitle = stringResource(R.string.settings_auto_cleanup_value),
-                    checked = settings.autoCleanup,
-                    onCheckedChange = viewModel::setAutoCleanup,
-                )
-                SettingItem(
-                    title = "保留最近消息数",
-                    subtitle = settings.cleanupThresholdCount.toString(),
-                    onClick = { showCleanupThreshold = true },
-                )
-                SettingItem(
-                    title = "保护期（小时）",
-                    subtitle = settings.cleanupProtectionHours.toString(),
-                    onClick = { showProtection = true },
-                )
-                SettingItem(
-                    title = stringResource(R.string.settings_recycle_bin),
-                    subtitle = "${settings.deletedRetentionDays} 天",
-                    onClick = { showRetention = true },
-                )
-                SettingItem(
-                    title = "立即清理（先预览，再确认）",
-                    subtitle = "默认不自动删除；手动清理可取消",
-                    onClick = viewModel::previewCleanup,
-                )
-                HorizontalDivider(color = MaterialTheme.softSeekColors.divider)
+                if (section != SettingsSection.MEMORY) return@item
+                SettingsGroup(title = stringResource(R.string.settings_memory)) {
+                    SettingsSwitchItem(
+                        title = stringResource(R.string.settings_auto_cleanup),
+                        subtitle = stringResource(R.string.settings_auto_cleanup_value),
+                        checked = settings.autoCleanup,
+                        onCheckedChange = viewModel::setAutoCleanup,
+                    )
+                    SettingItem(
+                        title = "保留最近消息数",
+                        subtitle = settings.cleanupThresholdCount.toString(),
+                        onClick = { showCleanupThreshold = true },
+                    )
+                    SettingItem(
+                        title = "保护期（小时）",
+                        subtitle = settings.cleanupProtectionHours.toString(),
+                        onClick = { showProtection = true },
+                    )
+                    SettingItem(
+                        title = stringResource(R.string.settings_recycle_bin),
+                        subtitle = "${settings.deletedRetentionDays} 天",
+                        onClick = { showRetention = true },
+                    )
+                    SettingItem(
+                        title = "立即清理（先预览，再确认）",
+                        subtitle = "默认不自动删除；手动清理可取消",
+                        onClick = viewModel::previewCleanup,
+                    )
+                }
             }
             item {
-                SettingsGroup(title = stringResource(R.string.settings_appearance), items = emptyList())
-                SettingItem(
-                    title = stringResource(R.string.settings_theme),
-                    subtitle = themeLabel(settings.themeMode),
-                    onClick = {
-                        val next = when (settings.themeMode) {
-                            AppThemeMode.SYSTEM -> AppThemeMode.LIGHT
-                            AppThemeMode.LIGHT -> AppThemeMode.DARK
-                            AppThemeMode.DARK -> AppThemeMode.SYSTEM
-                        }
-                        viewModel.update { it.copy(themeMode = next) }
-                    },
-                )
-                SettingsSwitchItem(
-                    title = stringResource(R.string.settings_dynamic_color),
-                    checked = settings.dynamicColor,
-                    onCheckedChange = { enabled -> viewModel.update { it.copy(dynamicColor = enabled) } },
-                )
-                SliderSetting(
-                    title = "字号 ${"%.2f".format(settings.fontScale)}x",
-                    value = settings.fontScale,
-                    range = 0.85f..1.3f,
-                    steps = 8,
-                    onValueChange = { value -> viewModel.update { it.copy(fontScale = value) } },
-                )
-                SliderSetting(
-                    title = "气泡圆角 ${settings.bubbleRadiusDp}dp",
-                    value = settings.bubbleRadiusDp.toFloat(),
-                    range = 4f..24f,
-                    steps = 9,
-                    onValueChange = { value -> viewModel.update { it.copy(bubbleRadiusDp = value.toInt()) } },
-                )
-                SettingItem(
-                    title = "代码块主题",
-                    subtitle = codeThemeLabel(settings.codeTheme),
-                    onClick = {
-                        val next = when (settings.codeTheme) {
-                            CodeTheme.FOLLOW_THEME -> CodeTheme.LIGHT
-                            CodeTheme.LIGHT -> CodeTheme.DARK
-                            CodeTheme.DARK -> CodeTheme.FOLLOW_THEME
-                        }
-                        viewModel.update { it.copy(codeTheme = next) }
-                    },
-                )
-                HorizontalDivider(color = MaterialTheme.softSeekColors.divider)
+                if (section != SettingsSection.APPEARANCE) return@item
+                SettingsGroup(title = stringResource(R.string.settings_appearance)) {
+                    SettingItem(
+                        title = stringResource(R.string.settings_theme),
+                        subtitle = themeLabel(settings.themeMode),
+                        onClick = {
+                            val next = when (settings.themeMode) {
+                                AppThemeMode.SYSTEM -> AppThemeMode.LIGHT
+                                AppThemeMode.LIGHT -> AppThemeMode.DARK
+                                AppThemeMode.DARK -> AppThemeMode.SYSTEM
+                            }
+                            viewModel.update { it.copy(themeMode = next) }
+                        },
+                    )
+                    SettingItem(
+                        title = "视觉风格",
+                        subtitle = settings.visualStyle.label,
+                        onClick = { showVisualStyle = true },
+                    )
+                    SliderSetting(
+                        title = "字号 ${"%.2f".format(settings.fontScale)}x",
+                        value = settings.fontScale,
+                        range = 0.85f..1.3f,
+                        steps = 8,
+                        onValueChange = { value -> viewModel.update { it.copy(fontScale = value) } },
+                    )
+                    SliderSetting(
+                        title = "气泡圆角 ${settings.bubbleRadiusDp}dp",
+                        value = settings.bubbleRadiusDp.toFloat(),
+                        range = 4f..24f,
+                        steps = 9,
+                        onValueChange = { value -> viewModel.update { it.copy(bubbleRadiusDp = value.toInt()) } },
+                    )
+                    SettingItem(
+                        title = "代码块主题",
+                        subtitle = codeThemeLabel(settings.codeTheme),
+                        onClick = {
+                            val next = when (settings.codeTheme) {
+                                CodeTheme.FOLLOW_THEME -> CodeTheme.LIGHT
+                                CodeTheme.LIGHT -> CodeTheme.DARK
+                                CodeTheme.DARK -> CodeTheme.FOLLOW_THEME
+                            }
+                            viewModel.update { it.copy(codeTheme = next) }
+                        },
+                    )
+                }
             }
             item {
+                if (section != SettingsSection.DATA) return@item
                 SettingsGroup(
                     title = stringResource(R.string.settings_data),
                     items = listOf(
@@ -407,6 +472,7 @@ fun SettingsScreen(
                 )
             }
             item {
+                if (section != SettingsSection.ABOUT) return@item
                 SettingsGroup(
                     title = stringResource(R.string.settings_about),
                     items = listOf(
@@ -423,6 +489,7 @@ fun SettingsScreen(
                 )
             }
             item {
+                if (section != SettingsSection.ABOUT) return@item
                 Text(
                     text = stringResource(R.string.disclaimer),
                     modifier = Modifier.padding(dimensionResource(R.dimen.content_padding)),
@@ -437,9 +504,20 @@ fun SettingsScreen(
         ApiKeyManagerDialog(
             keys = keys,
             onAdd = viewModel::addApiKey,
+            onUpdate = viewModel::updateApiKey,
             onActivate = viewModel::activateApiKey,
             onDelete = viewModel::deleteApiKey,
             onDismiss = { showKeyManager = false },
+        )
+    }
+    if (showProvider) {
+        ProviderTypeDialog(
+            current = settings.providerType,
+            onSelect = { type ->
+                viewModel.setProviderType(type)
+                showProvider = false
+            },
+            onDismiss = { showProvider = false },
         )
     }
     if (showBaseUrl) {
@@ -509,6 +587,7 @@ fun SettingsScreen(
             currentMaxTokens = settings.defaultMaxOutputTokens,
             onRefresh = viewModel::refreshModels,
             onApply = { model, effort ->
+                viewModel.ensureModel(model)
                 viewModel.update {
                     it.copy(
                         defaultModel = model.id,
@@ -595,6 +674,33 @@ fun SettingsScreen(
             onDismiss = { showPreset = false },
         )
     }
+    if (showVisualStyle) {
+        VisualStyleDialog(
+            current = settings.visualStyle,
+            onSelect = { style ->
+                AppLog.info(
+                    module = LogModule.THEME,
+                    message = "切换视觉风格: ${style.label}",
+                    metric = "theme_switch",
+                    value = 1,
+                    unit = "次",
+                )
+                viewModel.update { it.copy(visualStyle = style) }
+                showVisualStyle = false
+            },
+            onDismiss = { showVisualStyle = false },
+        )
+    }
+    if (showVoiceAnimation) {
+        VoiceAnimationStyleDialog(
+            current = settings.voiceAnimationStyle,
+            onSelect = { style ->
+                viewModel.update { it.copy(voiceAnimationStyle = style) }
+                showVoiceAnimation = false
+            },
+            onDismiss = { showVoiceAnimation = false },
+        )
+    }
     cleanupPreview?.let { preview ->
         AlertDialog(
             onDismissRequest = viewModel::dismissCleanupPreview,
@@ -638,26 +744,77 @@ fun SettingsScreen(
 @Composable
 private fun SettingsGroup(
     title: String,
-    items: List<SettingsEntry>,
+    items: List<SettingsEntry> = emptyList(),
+    content: (@Composable ColumnScope.() -> Unit)? = null,
 ) {
-    Column {
-        Text(
-            text = title,
-            modifier = Modifier.padding(
-                start = dimensionResource(R.dimen.content_padding),
-                top = 20.dp,
-                end = dimensionResource(R.dimen.content_padding),
-                bottom = dimensionResource(R.dimen.item_spacing),
+    val uiSettings = LocalSoftSeekUiSettings.current
+    var expanded by rememberSaveable(title) { mutableStateOf(true) }
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        label = "settings-chevron",
+    )
+    StyleAwareCard(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(
+                horizontal = uiSettings.screenHorizontalPaddingDp.dp,
+                vertical = uiSettings.sectionVerticalPaddingDp.dp,
             ),
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        items.forEach { entry ->
-            SettingItem(
-                title = entry.title,
-                subtitle = entry.subtitle,
-                onClick = entry.onClick,
-            )
+        contentPadding = false,
+    ) {
+        Column {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { expanded = !expanded }
+                    .padding(
+                        horizontal = uiSettings.sectionHeaderHorizontalPaddingDp.dp,
+                        vertical = uiSettings.sectionHeaderVerticalPaddingDp.dp,
+                    ),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.titleMedium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                    )
+                    if (items.isNotEmpty()) {
+                        Text(
+                            text = "${items.size} 项设置",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.softSeekColors.textSecondary,
+                        )
+                    }
+                }
+                Icon(
+                    imageVector = Icons.Outlined.KeyboardArrowDown,
+                    contentDescription = if (expanded) "收起" else "展开",
+                    modifier = Modifier
+                        .size(uiSettings.iconSizeDp.dp)
+                        .rotate(chevronRotation),
+                    tint = MaterialTheme.softSeekColors.textSecondary,
+                )
+            }
+            AnimatedVisibility(
+                visible = expanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut(),
+            ) {
+                Column {
+                    StyleAwareDivider(
+                        color = MaterialTheme.softSeekColors.divider.copy(alpha = 0.6f),
+                    )
+                    items.forEach { entry ->
+                        SettingItem(
+                            title = entry.title,
+                            subtitle = entry.subtitle,
+                            onClick = entry.onClick,
+                        )
+                    }
+                    content?.invoke(this)
+                }
+            }
         }
     }
 }
@@ -669,21 +826,14 @@ private fun SettingsSwitchItem(
     onCheckedChange: (Boolean) -> Unit,
     subtitle: String? = null,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = dimensionResource(R.dimen.content_padding), vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(text = title, style = MaterialTheme.typography.bodyLarge)
-            subtitle?.let {
-                Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.softSeekColors.textSecondary)
-            }
-        }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
-    }
-    HorizontalDivider(color = MaterialTheme.softSeekColors.divider)
+    StyleAwareSettingItem(
+        title = title,
+        subtitle = subtitle,
+        trailing = {
+            Switch(checked = checked, onCheckedChange = onCheckedChange)
+        },
+    )
+    StyleAwareDivider(color = MaterialTheme.softSeekColors.divider)
 }
 
 @Composable
@@ -695,34 +845,109 @@ private fun SliderSetting(
     onValueChange: (Float) -> Unit,
 ) {
     Column(modifier = Modifier.padding(horizontal = dimensionResource(R.dimen.content_padding))) {
-        Text(text = title, style = MaterialTheme.typography.bodyLarge)
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.softSeekColors.textPrimary,
+        )
         Slider(value = value, onValueChange = onValueChange, valueRange = range, steps = steps)
     }
+}
+
+@Composable
+private fun ProviderTypeDialog(
+    current: ProviderType,
+    onSelect: (ProviderType) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("接口协议") },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 420.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    text = "协议决定请求路径、鉴权头与流式事件格式。切换后会自动使用该协议的默认 Base URL（自定义地址会保留）和内置模型。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.softSeekColors.textSecondary,
+                )
+                ProviderType.entries.forEach { type ->
+                    FilterChip(
+                        selected = current == type,
+                        onClick = { onSelect(type) },
+                        label = { Text(type.displayName) },
+                    )
+                    Text(
+                        text = "默认地址：${type.defaultBaseUrl}\n默认模型：${type.defaultModelId}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.softSeekColors.textSecondary,
+                    )
+                }
+            }
+        },
+        confirmButton = {},
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text(stringResource(R.string.chat_cancel)) }
+        },
+    )
 }
 
 @Composable
 private fun ApiKeyManagerDialog(
     keys: List<ApiKeySummary>,
     onAdd: (String, String, String?) -> Unit,
+    onUpdate: (String, String, String?, String?) -> Unit,
     onActivate: (String) -> Unit,
     onDelete: (String) -> Unit,
     onDismiss: () -> Unit,
 ) {
-    var label by remember { mutableStateOf("DeepSeek Key") }
+    var editingId by remember { mutableStateOf<String?>(null) }
+    var label by remember { mutableStateOf("API Key") }
     var key by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
+
+    fun resetForm() {
+        editingId = null
+        label = "API Key"
+        key = ""
+        note = ""
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.settings_api_key)) },
         text = {
-            Column(modifier = Modifier.heightIn(max = 480.dp)) {
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 480.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
                 if (keys.isEmpty()) {
                     Text(stringResource(R.string.settings_api_key_not_set))
                 } else {
-                    LazyColumn(modifier = Modifier.heightIn(max = 220.dp)) {
-                        items(keys, key = { it.id }) { item ->
+                    Text(
+                        text = "点击已有 Key 可修改名称、备注或替换密钥；点击“切换”启用另一把 Key。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.softSeekColors.textSecondary,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Column {
+                        keys.forEach { item ->
                             Row(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        editingId = item.id
+                                        label = item.label
+                                        note = item.note.orEmpty()
+                                        key = ""
+                                    }
+                                    .padding(vertical = 2.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 Column(
@@ -745,7 +970,12 @@ private fun ApiKeyManagerDialog(
                                         Text("切换")
                                     }
                                 }
-                                IconButton(onClick = { onDelete(item.id) }) {
+                                IconButton(
+                                    onClick = {
+                                        onDelete(item.id)
+                                        if (editingId == item.id) resetForm()
+                                    },
+                                ) {
                                     Icon(Icons.Outlined.Close, contentDescription = "删除")
                                 }
                             }
@@ -754,6 +984,14 @@ private fun ApiKeyManagerDialog(
                     }
                 }
                 Spacer(Modifier.height(8.dp))
+                if (editingId != null) {
+                    Text(
+                        text = "正在编辑已保存的 Key；Key 留空时只修改名称和备注。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                }
                 OutlinedTextField(
                     value = label,
                     onValueChange = { label = it },
@@ -766,7 +1004,7 @@ private fun ApiKeyManagerDialog(
                     onValueChange = { key = it },
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
-                    label = { Text("API Key") },
+                    label = { Text(if (editingId == null) "API Key" else "替换 API Key（可留空）") },
                     placeholder = { Text(stringResource(R.string.settings_api_key_dialog_hint)) },
                     visualTransformation = PasswordVisualTransformation(),
                 )
@@ -788,15 +1026,23 @@ private fun ApiKeyManagerDialog(
         confirmButton = {
             TextButton(
                 onClick = {
-                    if (key.isNotBlank()) {
+                    if (editingId != null) {
+                        onUpdate(
+                            editingId!!,
+                            label,
+                            key.ifBlank { null },
+                            note.ifBlank { null },
+                        )
+                        resetForm()
+                    } else if (key.isNotBlank()) {
                         onAdd(label, key, note.ifBlank { null })
                         key = ""
                         note = ""
                     }
                 },
-                enabled = key.isNotBlank(),
+                enabled = editingId != null || key.isNotBlank(),
             ) {
-                Text("添加 Key")
+                Text(if (editingId == null) "添加 Key" else "保存修改")
             }
         },
         dismissButton = {
@@ -872,7 +1118,8 @@ private fun BaseUrlDialog(
                     )
                 }
                 Text(
-                    text = "仅允许 HTTPS；保存后新请求立即使用该地址。",
+                    text = "填写 API 根路径，例如 https://api.openai.com/v1 或 https://api.deepseek.com。" +
+                        "应用会自动拼接 /chat/completions 与 /models；仅允许 HTTPS。",
                     modifier = Modifier.padding(top = 8.dp),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.softSeekColors.textSecondary,
@@ -899,41 +1146,59 @@ private fun ModelSettingsDialog(
     onDismiss: () -> Unit,
 ) {
     val available = models
-    if (available.isEmpty()) return
-    var selected by remember(currentModel) {
-        mutableStateOf(available.firstOrNull { it.id == currentModel } ?: available.first())
+    var selected by remember(currentModel, available) {
+        mutableStateOf(available.firstOrNull { it.id == currentModel })
     }
     var effort by remember(currentEffort) { mutableStateOf(currentEffort) }
+    var manualModelId by remember(currentModel) { mutableStateOf("") }
+    LaunchedEffect(Unit) { onRefresh() }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(stringResource(R.string.chat_model_title)) },
         text = {
-            Column(modifier = Modifier.heightIn(max = 430.dp)) {
-                available.forEach { model ->
-                    FilterChip(
-                        selected = model.id == selected.id,
-                        onClick = { selected = model },
-                        label = {
-                            Text(
-                                "${model.displayName} · ${if (model.inputModalities.contains(
-                                        "image",
-                                    )
-                                ) {
-                                    "图片+文本"
-                                } else {
-                                    "纯文本"
-                                }}",
-                            )
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 2.dp),
+            Column(
+                modifier = Modifier
+                    .heightIn(max = 430.dp)
+                    .verticalScroll(rememberScrollState()),
+            ) {
+                if (available.isEmpty()) {
+                    Text(
+                        text = "模型列表为空。可在下方手动填写 OpenAI 兼容模型 ID。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.softSeekColors.textSecondary,
                     )
+                } else {
+                    available.forEach { model ->
+                        FilterChip(
+                            selected = model.id == selected?.id,
+                            onClick = { selected = model },
+                            label = {
+                                Text(
+                                    "${model.displayName} · ${if (model.inputModalities.contains("image")) {
+                                        "图片+文本"
+                                    } else {
+                                        "纯文本"
+                                    }}",
+                                )
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 2.dp),
+                        )
+                    }
                 }
                 Spacer(Modifier.height(8.dp))
+                Text(
+                    text = stringResource(R.string.settings_thinking_effort),
+                    style = MaterialTheme.typography.labelLarge,
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     ReasoningEffort.entries.forEach { level ->
-                        if (level == ReasoningEffort.NONE || selected.reasoningLevels.contains(level)) {
+                        val supported = selected == null ||
+                            selected?.reasoningLevels?.isEmpty() == true ||
+                            level == ReasoningEffort.NONE ||
+                            selected?.reasoningLevels?.contains(level) == true
+                        if (supported) {
                             FilterChip(
                                 selected = effort == level,
                                 onClick = { effort = level },
@@ -942,6 +1207,18 @@ private fun ModelSettingsDialog(
                         }
                     }
                 }
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = manualModelId,
+                    onValueChange = { manualModelId = it.trim() },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    label = { Text("手动模型 ID（可选）") },
+                    placeholder = { Text("例如 gpt-4o、deepseek-chat") },
+                    supportingText = {
+                        Text("填写后优先使用此 ID；不会影响 /models 的结果")
+                    },
+                )
                 Text(
                     text = "当前 max_tokens：$currentMaxTokens",
                     modifier = Modifier.padding(top = 8.dp),
@@ -952,7 +1229,25 @@ private fun ModelSettingsDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { onApply(selected, effort) }) {
+            TextButton(
+                onClick = {
+                    val manual = manualModelId.trim()
+                    val model = if (manual.isNotBlank()) {
+                        AiModelInfo(
+                            id = manual,
+                            displayName = manual,
+                            contextWindow = 0,
+                            maxOutputTokens = currentMaxTokens,
+                            inputModalities = listOf("text", "image"),
+                            reasoningLevels = emptyList(),
+                            defaultReasoningEffort = null,
+                        )
+                    } else {
+                        selected
+                    }
+                    if (model != null) onApply(model, effort)
+                },
+            ) {
                 Text(stringResource(R.string.chat_confirm))
             }
         },

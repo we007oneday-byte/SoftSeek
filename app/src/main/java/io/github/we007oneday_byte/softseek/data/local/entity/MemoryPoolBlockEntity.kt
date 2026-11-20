@@ -3,6 +3,7 @@ package io.github.we007oneday_byte.softseek.data.local.entity
 import androidx.room.Entity
 import androidx.room.Index
 import androidx.room.PrimaryKey
+import io.github.we007oneday_byte.softseek.core.constant.AppConstants
 import io.github.we007oneday_byte.softseek.domain.model.ReasoningEffort
 
 @Entity(
@@ -18,7 +19,7 @@ data class MemoryPoolBlockEntity(
     val createdAt: Long,
     val updatedAt: Long,
     val systemPrompt: String? = null,
-    val modelName: String = "deepseek-flash",
+    val modelName: String = AppConstants.DEFAULT_MODEL,
     val reasoningEffort: ReasoningEffort = ReasoningEffort.HIGH,
     val maxOutputTokens: Int = 8192,
     val tags: List<String> = emptyList(),

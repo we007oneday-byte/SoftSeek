@@ -77,6 +77,25 @@ class KeystoreApiKeyStore
             }
         }
 
+        override fun updateKey(id: String, label: String, key: String?, note: String?) {
+            synchronized(this) {
+                val record = records.firstOrNull { it.id == id } ?: return
+                val replacement = key?.trim()?.takeIf { it.isNotBlank() }
+                val updated = record.copy(
+                    label = label.trim().ifBlank { record.label },
+                    note = note?.trim()?.takeIf { it.isNotBlank() },
+                    hint = replacement?.let { hintOf(it) } ?: record.hint,
+                    cipher = replacement?.let { encrypt(it) } ?: record.cipher,
+                )
+                updateRecordLocked(updated)
+                if (activeId() == id && replacement != null) {
+                    activeKey.value = replacement
+                }
+                publishLocked()
+                saveLocked()
+            }
+        }
+
         override fun activateKey(id: String) {
             synchronized(this) {
                 selectActive(id)
@@ -94,7 +113,7 @@ class KeystoreApiKeyStore
             require(cleanKey.isNotBlank()) { "API Key 不能为空" }
             val record = Record(
                 id = UUID.randomUUID().toString(),
-                label = label.trim().ifBlank { "DeepSeek Key" },
+                label = label.trim().ifBlank { "API Key" },
                 note = note?.trim()?.takeIf { it.isNotBlank() },
                 hint = hintOf(cleanKey),
                 createdAt = System.currentTimeMillis(),
@@ -173,7 +192,7 @@ class KeystoreApiKeyStore
                     records.add(
                         Record(
                             id = item.getString("id"),
-                            label = item.optString("label", "DeepSeek Key"),
+                            label = item.optString("label", "API Key"),
                             note = item.optString("note").takeIf { it.isNotBlank() },
                             hint = item.optString("hint"),
                             createdAt = item.optLong("createdAt"),

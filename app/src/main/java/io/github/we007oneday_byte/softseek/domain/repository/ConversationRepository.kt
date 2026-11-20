@@ -1,5 +1,6 @@
 package io.github.we007oneday_byte.softseek.domain.repository
 
+import io.github.we007oneday_byte.softseek.core.constant.AppConstants
 import io.github.we007oneday_byte.softseek.domain.model.ChatMessage
 import io.github.we007oneday_byte.softseek.domain.model.Conversation
 import io.github.we007oneday_byte.softseek.domain.model.MessageAttachment
@@ -13,7 +14,7 @@ interface ConversationRepository {
 
     suspend fun createConversation(
         title: String,
-        modelName: String = "deepseek-flash",
+        modelName: String = AppConstants.DEFAULT_MODEL,
         reasoningEffort: ReasoningEffort = ReasoningEffort.HIGH,
         maxOutputTokens: Int = 8192,
         systemPrompt: String? = null,
